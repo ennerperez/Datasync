@@ -160,7 +160,7 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
         bool isAuthorized = await AccessControlProvider.IsAuthorizedAsync(operation, entity, cancellationToken).ConfigureAwait(false);
         if (!isAuthorized)
         {
-            Logger.LogWarning("{operation} {id} statusCode=401 unauthorized", operation, entity?.Id ?? "");
+            Logger.LogWarning("{operation} {id} statusCode=401 unauthorized", operation, entity is null ? "" : GetTableDataAccessor().GetId(entity) ?? "");
             if (Options.UnsafeEntityLogging)
             {
                 Logger.LogDebug("{operation} entity {entity} statusCode=401 unauthorized", operation, entity?.ToJsonString() ?? "");
@@ -194,7 +194,7 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
     [NonAction]
     protected async ValueTask<TEntity> DeserializeJsonContent(CancellationToken cancellationToken = default)
     {
-        IDatasyncServiceOptions options = HttpContext.RequestServices?.GetService<IDatasyncServiceOptions>() ?? new DatasyncServiceOptions();
+        IDatasyncServiceOptions options = GetDatasyncServiceOptions();
         HttpContext.Request.EnableBuffering();
         if (HttpContext.Request.HasJsonContentType())
         {
@@ -214,4 +214,20 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
             throw new HttpException(StatusCodes.Status415UnsupportedMediaType, "Unsupported media type");
         }
     }
+
+    /// <summary>
+    /// Retrieves the Datasync service options for the current request.
+    /// </summary>
+    /// <returns>The Datasync service options.</returns>
+    [NonAction]
+    protected IDatasyncServiceOptions GetDatasyncServiceOptions()
+        => HttpContext?.RequestServices?.GetService<IDatasyncServiceOptions>() ?? new DatasyncServiceOptions();
+
+    /// <summary>
+    /// Retrieves the Datasync metadata accessor for the current entity type.
+    /// </summary>
+    /// <returns>The Datasync metadata accessor.</returns>
+    [NonAction]
+    protected TableDataAccessor<TEntity> GetTableDataAccessor()
+        => Options.GetTableDataProperties(GetDatasyncServiceOptions()).GetAccessor<TEntity>();
 }

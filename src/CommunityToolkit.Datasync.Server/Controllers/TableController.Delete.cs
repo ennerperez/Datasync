@@ -23,6 +23,7 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
     public virtual async Task<IActionResult> DeleteAsync([FromRoute] string id, CancellationToken cancellationToken = default)
     {
         Logger.LogInformation("DeleteAsync: {id}", id);
+        TableDataAccessor<TEntity> tableData = GetTableDataAccessor();
         TEntity entity = await Repository.ReadAsync(id, cancellationToken).ConfigureAwait(false);
 
         if (!AccessControlProvider.EntityIsInView(entity))
@@ -33,18 +34,18 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
 
         await AuthorizeRequestAsync(TableOperation.Delete, entity, cancellationToken).ConfigureAwait(false);
 
-        if (Options.EnableSoftDelete && entity.Deleted)
+        if (Options.EnableSoftDelete && tableData.GetDeleted(entity))
         {
             Logger.LogWarning("DeleteAsync: {id} statusCode=410 already deleted", id);
             throw new HttpException(StatusCodes.Status410Gone);
         }
 
-        Request.ParseConditionalRequest(entity, out byte[] version);
+        Request.ParseConditionalRequest(entity, tableData, out byte[] version);
 
         if (Options.EnableSoftDelete)
         {
             Logger.LogInformation("DeleteAsync: deleted {id} (soft-delete)", id);
-            entity.Deleted = true;
+            tableData.SetDeleted(entity, true);
             await AccessControlProvider.PreCommitHookAsync(TableOperation.Update, entity, cancellationToken).ConfigureAwait(false);
             await Repository.ReplaceAsync(entity, version, cancellationToken).ConfigureAwait(false);
             await PostCommitHookAsync(TableOperation.Update, entity, cancellationToken).ConfigureAwait(false);

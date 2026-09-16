@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using CommunityToolkit.Datasync.Server;
 using NJsonSchema;
 using NSwag;
 using NSwag.Generation.AspNetCore;
@@ -24,9 +25,18 @@ public static partial class OpenApiDatasyncExtensions
     /// </summary>
     /// <param name="settings">The NSwag settings object.</param>
     public static void AddDatasyncProcessor(this AspNetCoreOpenApiDocumentGeneratorSettings settings)
+        => settings.AddDatasyncProcessor(null);
+
+    /// <summary>
+    /// Adds the operation and schema processors that are used for the Datasync
+    /// service.
+    /// </summary>
+    /// <param name="settings">The NSwag settings object.</param>
+    /// <param name="tableDataProperties">The CLR property map used for Datasync system metadata.</param>
+    public static void AddDatasyncProcessor(this AspNetCoreOpenApiDocumentGeneratorSettings settings, TableDataPropertyMap? tableDataProperties)
     {
-        settings.OperationProcessors.Add(new DatasyncOperationProcessor());
-        settings.SchemaSettings.SchemaProcessors.Add(new DatasyncSchemaProcessor());
+        settings.OperationProcessors.Add(new DatasyncOperationProcessor(tableDataProperties));
+        settings.SchemaSettings.SchemaProcessors.Add(new DatasyncSchemaProcessor(tableDataProperties));
     }
 
     /// <summary>

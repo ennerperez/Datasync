@@ -18,7 +18,8 @@ public class CosmosSingleTableOptions<TEntity> : CosmosTableOptions<TEntity> whe
     /// <param name="databaseId">The ID of the database that the container is in.</param>
     /// <param name="containerId">The ID of the container that the entities are stored in.</param>
     /// <param name="shouldUpdateTimestamp">Should the timestamp be updated when an entity is updated by the repository (default is true).</param>
-    public CosmosSingleTableOptions(string databaseId, string containerId, bool shouldUpdateTimestamp = true) : base(databaseId, containerId, shouldUpdateTimestamp)
+    /// <param name="tableDataProperties">The CLR property map used for Datasync system metadata.</param>
+    public CosmosSingleTableOptions(string databaseId, string containerId, bool shouldUpdateTimestamp = true, TableDataPropertyMap? tableDataProperties = null) : base(databaseId, containerId, shouldUpdateTimestamp, tableDataProperties)
     {
     }
 
@@ -31,9 +32,10 @@ public class CosmosSingleTableOptions<TEntity> : CosmosTableOptions<TEntity> whe
 
     public override string GetPartitionKey(TEntity entity, out PartitionKey partitionKey)
     {
-        partitionKey = new PartitionKey(entity.Id);
+        string id = TableDataProperties.GetAccessor<TEntity>().GetId(entity)!;
+        partitionKey = new PartitionKey(id);
 
-        return entity.Id;
+        return id;
     }
     /// <summary>
     /// 

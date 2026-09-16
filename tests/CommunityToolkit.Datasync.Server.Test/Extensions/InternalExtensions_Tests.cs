@@ -27,6 +27,9 @@ public class InternalExtensions_Tests
         Version = [0x01, 0x00, 0x42, 0x22, 0x47, 0x8F]
     };
 
+    private readonly TableDataPropertyMap mappedProperties = new TableDataPropertyMap()
+        .Map(id: "Key", updatedAt: "ChangedOn", version: "Token", deleted: "Removed");
+
     private const string matchingETag = "\"AQBCIkeP\"";
     private const string nonMatchingETag = "\"Foo\"";
 
@@ -36,6 +39,28 @@ public class InternalExtensions_Tests
     class TestObject
     {
         public TestObject Arg { get; set; }
+    }
+
+    class MappedTableData : ITableData
+    {
+        public string Id { get; set; } = string.Empty;
+
+        public bool Deleted { get; set; }
+
+        public DateTimeOffset? UpdatedAt { get; set; }
+
+        public byte[] Version { get; set; } = [];
+
+        public string Key { get; set; } = string.Empty;
+
+        public bool Removed { get; set; }
+
+        public DateTimeOffset? ChangedOn { get; set; }
+
+        public byte[] Token { get; set; } = [];
+
+        public bool Equals(ITableData other)
+            => other is not null && Id == other.Id && Version.SequenceEqual(other.Version);
     }
     #endregion
 
@@ -111,6 +136,24 @@ public class InternalExtensions_Tests
     }
     #endregion
 
+    #region ApplyDeletedView<TEntity>(IQueryable, HttpRequest, bool, TableDataAccessor)
+    [Fact]
+    public void ApplyDeletedView_WithMappedDeletedProperty_Works()
+    {
+        DefaultHttpContext context = new();
+        TableDataAccessor<MappedTableData> tableData = this.mappedProperties.GetAccessor<MappedTableData>();
+        IQueryable<MappedTableData> query = new[]
+        {
+            new MappedTableData { Key = "active", Removed = false },
+            new MappedTableData { Key = "removed", Removed = true }
+        }.AsQueryable();
+
+        List<MappedTableData> results = query.ApplyDeletedView(context.Request, true, tableData).ToList();
+
+        results.Should().ContainSingle().Which.Key.Should().Be("active");
+    }
+    #endregion
+
     #region ParseConditionalRequest<TEntity>(HttpRequest, TEntity, out byte[])
     [Theory]
     [InlineData("GET", null, null, false)]
@@ -142,6 +185,24 @@ public class InternalExtensions_Tests
         {
             version.Should().BeEmpty();
         }
+    }
+
+    [Fact]
+    public void ParseConditionalRequest_WithMappedProperties_Works()
+    {
+        HttpContext context = new DefaultHttpContext();
+        context.Request.Method = "POST";
+        context.Request.Headers["If-Match"] = matchingETag;
+        MappedTableData entity = new()
+        {
+            Key = "mapped",
+            ChangedOn = DateTimeOffset.Parse("2023-11-13T12:53:13.123Z"),
+            Token = [0x01, 0x00, 0x42, 0x22, 0x47, 0x8F]
+        };
+
+        context.Request.ParseConditionalRequest(entity, this.mappedProperties.GetAccessor<MappedTableData>(), out byte[] version);
+
+        version.Should().BeEquivalentTo(entity.Token);
     }
 
     [Theory]
@@ -241,6 +302,22 @@ public class InternalExtensions_Tests
         headers.SetConditionalHeaders(entity);
 
         headers.Should().NotContainKey("ETag");
+        headers.Should().ContainKey("Last-Modified").WhoseValue.Should().ContainSingle(v => v == "Mon, 13 Nov 2023 13:30:05 GMT");
+    }
+
+    [Fact]
+    public void AddHeadersFromEntity_WithMappedProperties_Works()
+    {
+        HeaderDictionary headers = [];
+        MappedTableData entity = new()
+        {
+            Token = [0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68],
+            ChangedOn = DateTimeOffset.Parse("2023-11-13T13:30:05.1234Z")
+        };
+
+        headers.SetConditionalHeaders(entity, this.mappedProperties);
+
+        headers.Should().ContainKey("ETag").WhoseValue.Should().ContainSingle(v => v == "\"YWJjZGVmZ2g=\"");
         headers.Should().ContainKey("Last-Modified").WhoseValue.Should().ContainSingle(v => v == "Mon, 13 Nov 2023 13:30:05 GMT");
     }
 

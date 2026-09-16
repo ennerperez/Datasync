@@ -24,6 +24,7 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
     public virtual async Task<IActionResult> ReadAsync([FromRoute] string id, CancellationToken cancellationToken = default)
     {
         Logger.LogInformation("ReadAsync: {id}", id);
+        TableDataAccessor<TEntity> tableData = GetTableDataAccessor();
         TEntity entity = await Repository.ReadAsync(id, cancellationToken).ConfigureAwait(false);
 
         if (!AccessControlProvider.EntityIsInView(entity))
@@ -34,15 +35,15 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
 
         await AuthorizeRequestAsync(TableOperation.Read, entity, cancellationToken).ConfigureAwait(false);
 
-        if (Options.EnableSoftDelete && entity.Deleted && !Request.ShouldIncludeDeletedEntities())
+        if (Options.EnableSoftDelete && tableData.GetDeleted(entity) && !Request.ShouldIncludeDeletedEntities())
         {
             Logger.LogWarning("ReadAsync: {id} statusCode=410 deleted", id);
             throw new HttpException(StatusCodes.Status410Gone);
         }
 
-        Request.ParseConditionalRequest(entity, out _);
+        Request.ParseConditionalRequest(entity, tableData, out _);
 
-        Logger.LogInformation("ReadAsync: read {id}", entity.Id);
+        Logger.LogInformation("ReadAsync: read {id}", tableData.GetId(entity));
         if (Options.UnsafeEntityLogging)
         {
             Logger.LogDebug("ReadAsync: read entity {entity}", entity.ToJsonString());

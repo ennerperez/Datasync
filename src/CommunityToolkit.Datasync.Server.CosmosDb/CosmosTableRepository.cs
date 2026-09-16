@@ -25,6 +25,10 @@ public class CosmosTableRepository<TEntity> : IRepository<TEntity> where TEntity
     /// The <see cref="Container"/> used for saving changes to the entity set.
     /// </summary>
     protected Container Container { get; }
+    /// <summary>
+    /// The accessor for Datasync system metadata.
+    /// </summary>
+    protected TableDataAccessor<TEntity> TableData { get; }
 
     /// <inheritdoc />
     public async ValueTask<int> CountAsync(IQueryable<TEntity> queryable, CancellationToken cancellationToken = default)
@@ -48,6 +52,7 @@ public class CosmosTableRepository<TEntity> : IRepository<TEntity> where TEntity
         }
 
         Options = options ?? throw new ArgumentNullException(nameof(options));
+        TableData = Options.TableDataProperties.GetAccessor<TEntity>();
 
         Container = client.GetContainer(options.DatabaseId, options.ContainerId);
 
@@ -81,7 +86,7 @@ public class CosmosTableRepository<TEntity> : IRepository<TEntity> where TEntity
     {
         if (Options.ShouldUpdateTimestamp)
         {
-            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            TableData.SetUpdatedAt(entity, DateTimeOffset.UtcNow);
         }
     }
 
@@ -116,9 +121,9 @@ public class CosmosTableRepository<TEntity> : IRepository<TEntity> where TEntity
     /// <inheritdoc />
     public virtual async ValueTask CreateAsync(TEntity entity, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(entity.Id))
+        if (string.IsNullOrEmpty(TableData.GetId(entity)))
         {
-            entity.Id = Options.IdGenerator.Invoke(entity);
+            TableData.SetId(entity, Options.IdGenerator.Invoke(entity));
         }
 
         string id = Options.GetPartitionKey(entity, out PartitionKey partitionKey);
@@ -129,8 +134,8 @@ public class CosmosTableRepository<TEntity> : IRepository<TEntity> where TEntity
 
             ItemResponse<TEntity> response = await Container.CreateItemAsync(entity, partitionKey, cancellationToken: cancellationToken);
 
-            entity.ETag = response.Resource.ETag;
-            entity.UpdatedAt = response.Resource.UpdatedAt;
+            TableData.SetVersion(entity, TableData.GetVersion(response.Resource));
+            TableData.SetUpdatedAt(entity, TableData.GetUpdatedAt(response.Resource));
 
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -173,7 +178,7 @@ public class CosmosTableRepository<TEntity> : IRepository<TEntity> where TEntity
             throw new HttpException((int)HttpStatusCode.BadRequest, "ID is required");
         }
 
-        if(Options.TryParsePartitionKey(id, out string entityId, out PartitionKey partitionKey) == false)
+        if (Options.TryParsePartitionKey(id, out string entityId, out PartitionKey partitionKey) == false)
         {
             throw new HttpException((int)HttpStatusCode.BadRequest, "ID is not in the correct format");
         }
@@ -185,7 +190,7 @@ public class CosmosTableRepository<TEntity> : IRepository<TEntity> where TEntity
     /// <inheritdoc />
     public virtual async ValueTask ReplaceAsync(TEntity entity, byte[]? version = null, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(entity.Id))
+        if (string.IsNullOrEmpty(TableData.GetId(entity)))
         {
             throw new HttpException((int)HttpStatusCode.BadRequest, "ID is required");
         }

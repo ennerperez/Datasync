@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using CommunityToolkit.Datasync.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using System.Reflection;
@@ -21,5 +22,15 @@ public static class SwaggerGenExtensions
     public static void AddDatasyncControllers(this SwaggerGenOptions options)
     {
         options.DocumentFilter<DatasyncDocumentFilter>(Assembly.GetCallingAssembly());
+    }
+
+    /// <summary>
+    /// Adds the Datasync <see cref="IDocumentFilter"/> to the SwaggerGen pipeline.
+    /// </summary>
+    /// <param name="options">The <see cref="SwaggerGenOptions"/> representing the Swashbuckle configuration pipeline.</param>
+    /// <param name="tableDataProperties">The CLR property map used for Datasync system metadata.</param>
+    public static void AddDatasyncControllers(this SwaggerGenOptions options, TableDataPropertyMap tableDataProperties)
+    {
+        options.DocumentFilter<DatasyncDocumentFilter>(Assembly.GetCallingAssembly(), tableDataProperties);
     }
 }

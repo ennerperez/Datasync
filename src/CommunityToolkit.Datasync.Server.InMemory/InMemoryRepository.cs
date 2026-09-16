@@ -18,23 +18,31 @@ namespace CommunityToolkit.Datasync.Server.InMemory;
 public class InMemoryRepository<TEntity> : IRepository<TEntity> where TEntity : InMemoryTableData
 {
     private readonly ConcurrentDictionary<string, TEntity> _entities = new();
+    private readonly TableDataAccessor<TEntity> tableData;
 
     /// <summary>
     /// Creates a new empty <see cref="InMemoryRepository{TEntity}"/> repository instance.
     /// </summary>
-    public InMemoryRepository()
+    public InMemoryRepository(TableDataPropertyMap? tableDataProperties = null)
     {
+        this.tableData = (tableDataProperties ?? new TableDataPropertyMap()).GetAccessor<TEntity>();
     }
 
     /// <summary>
     /// Creates a new populated <see cref="InMemoryRepository{TEntity}"/> repository instance.
     /// </summary>
     /// <param name="entities">A set of entities to be stored in the repository.</param>
-    public InMemoryRepository(IEnumerable<TEntity> entities)
+    /// <param name="tableDataProperties"></param>
+    public InMemoryRepository(IEnumerable<TEntity> entities, TableDataPropertyMap? tableDataProperties = null)
+        : this(tableDataProperties)
     {
         foreach (TEntity entity in entities)
         {
-            entity.Id ??= IdGenerator.Invoke(entity);
+            if (this.tableData.GetId(entity) is null)
+            {
+                this.tableData.SetId(entity, IdGenerator.Invoke(entity));
+            }
+
             StoreEntity(entity);
         }
     }
@@ -104,9 +112,9 @@ public class InMemoryRepository<TEntity> : IRepository<TEntity> where TEntity : 
     /// <param name="entity">The entity to store in the repository.</param>
     internal void StoreEntity(TEntity entity)
     {
-        entity.UpdatedAt = DateTimeOffset.UtcNow;
-        entity.Version = VersionGenerator.Invoke();
-        this._entities[entity.Id] = Disconnect(entity);
+        this.tableData.SetUpdatedAt(entity, DateTimeOffset.UtcNow);
+        this.tableData.SetVersion(entity, VersionGenerator.Invoke());
+        this._entities[this.tableData.GetId(entity)!] = Disconnect(entity);
     }
 
     /// <summary>
@@ -132,12 +140,14 @@ public class InMemoryRepository<TEntity> : IRepository<TEntity> where TEntity : 
     public virtual ValueTask CreateAsync(TEntity entity, CancellationToken cancellationToken = default)
     {
         ThrowExceptionIfSet();
-        if (string.IsNullOrEmpty(entity.Id))
+        string? entityId = this.tableData.GetId(entity);
+        if (string.IsNullOrEmpty(entityId))
         {
-            entity.Id = IdGenerator.Invoke(entity);
+            entityId = IdGenerator.Invoke(entity);
+            this.tableData.SetId(entity, entityId);
         }
 
-        if (this._entities.TryGetValue(entity.Id, out TEntity? storedEntity))
+        if (this._entities.TryGetValue(entityId, out TEntity? storedEntity))
         {
             throw new HttpException(HttpStatusCodes.Status409Conflict) { Payload = Disconnect(storedEntity) };
         }
@@ -160,7 +170,7 @@ public class InMemoryRepository<TEntity> : IRepository<TEntity> where TEntity : 
             throw new HttpException(HttpStatusCodes.Status404NotFound);
         }
 
-        if (version?.Length > 0 && !storedEntity.Version.SequenceEqual(version))
+        if (version?.Length > 0 && !this.tableData.GetVersion(storedEntity).SequenceEqual(version))
         {
             throw new HttpException(HttpStatusCodes.Status412PreconditionFailed) { Payload = Disconnect(storedEntity) };
         }
@@ -190,17 +200,18 @@ public class InMemoryRepository<TEntity> : IRepository<TEntity> where TEntity : 
     public virtual ValueTask ReplaceAsync(TEntity entity, byte[]? version = null, CancellationToken cancellationToken = default)
     {
         ThrowExceptionIfSet();
-        if (string.IsNullOrEmpty(entity.Id))
+        string? entityId = this.tableData.GetId(entity);
+        if (string.IsNullOrEmpty(entityId))
         {
             throw new HttpException(HttpStatusCodes.Status400BadRequest);
         }
 
-        if (!this._entities.TryGetValue(entity.Id, out TEntity? storedEntity))
+        if (!this._entities.TryGetValue(entityId, out TEntity? storedEntity))
         {
             throw new HttpException(HttpStatusCodes.Status404NotFound);
         }
 
-        if (version?.Length > 0 && !storedEntity.Version.SequenceEqual(version))
+        if (version?.Length > 0 && !this.tableData.GetVersion(storedEntity).SequenceEqual(version))
         {
             throw new HttpException(HttpStatusCodes.Status412PreconditionFailed) { Payload = Disconnect(storedEntity) };
         }

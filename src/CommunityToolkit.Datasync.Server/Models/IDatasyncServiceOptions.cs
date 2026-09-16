@@ -18,4 +18,9 @@ public interface IDatasyncServiceOptions
     /// The serializer options to use for communication with a Datasync client.
     /// </summary>
     JsonSerializerOptions JsonSerializerOptions { get; }
+
+    /// <summary>
+    /// The CLR property map used for Datasync system metadata.
+    /// </summary>
+    TableDataPropertyMap TableDataProperties { get; }
 }

@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using CommunityToolkit.Datasync.Server;
 using CommunityToolkit.Datasync.Server.Filters;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.OpenApi;
@@ -20,8 +21,11 @@ namespace CommunityToolkit.Datasync.Server.Swashbuckle;
 /// Creates a new <see cref="DatasyncDocumentFilter"/>.
 /// </remarks>
 /// <param name="assemblyToQuery">The assembly to query for TableController instances, if any.  If none is provided, the calling assembly is queried.</param>
-public class DatasyncDocumentFilter(Assembly? assemblyToQuery = null) : IDocumentFilter
+/// <param name="tableDataProperties">The CLR property map used for Datasync system metadata.</param>
+public class DatasyncDocumentFilter(Assembly? assemblyToQuery = null, TableDataPropertyMap? tableDataProperties = null) : IDocumentFilter
 {
+    private readonly TableDataPropertyMap tableDataProperties = tableDataProperties ?? new TableDataPropertyMap();
+
     // The list of operation types.
     private enum OpType
     {
@@ -78,7 +82,7 @@ public class DatasyncDocumentFilter(Assembly? assemblyToQuery = null) : IDocumen
             _ = context.SchemaGenerator.GenerateSchema(entityType, context.SchemaRepository);
         }
 
-        context.SchemaRepository.Schemas[entityType.Name].MakeSystemPropertiesReadonly();
+        context.SchemaRepository.Schemas[entityType.Name].MakeSystemPropertiesReadonly(this.tableDataProperties.GetJsonSystemPropertyNames());
         _ = document.AddComponent(entityType.Name, context.SchemaRepository.Schemas[entityType.Name]);
         this.processedEntityNames.Add(entityType.Name);
     }
@@ -228,7 +232,7 @@ public class DatasyncDocumentFilter(Assembly? assemblyToQuery = null) : IDocumen
     /// <param name="controllerType">The type of the controller being used.</param>
     /// <returns><c>true</c> if the Api description represents the controller.</returns>
     internal static bool IsApiDescriptionForController(ApiDescription description, Type controllerType)
-        => description.TryGetMethodInfo(out MethodInfo methodInfo) 
+        => description.TryGetMethodInfo(out MethodInfo methodInfo)
         && methodInfo.ReflectedType == controllerType
         && (methodInfo.Name.Equals(queryMethod) || methodInfo.Name.Equals(createMethod));
 

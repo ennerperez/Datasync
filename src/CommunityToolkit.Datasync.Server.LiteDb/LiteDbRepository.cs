@@ -14,6 +14,7 @@ namespace CommunityToolkit.Datasync.Server.LiteDb;
 public class LiteDbRepository<TEntity> : IRepository<TEntity> where TEntity : LiteDbTableData
 {
     private readonly LiteDatabase connection;
+    private readonly TableDataAccessor<TEntity> tableData;
 
     // On a web server (like this is normally used in), we expect the LiteDatabase to be
     // a singleton and we want to ensure that writes to the database are serialized.  We
@@ -28,7 +29,8 @@ public class LiteDbRepository<TEntity> : IRepository<TEntity> where TEntity : Li
     /// The collection name is based on the entity type.
     /// </remarks>
     /// <param name="dbConnection">The <see cref="LiteDatabase"/> connection to use for storing entities.</param>
-    public LiteDbRepository(LiteDatabase dbConnection) : this(dbConnection, typeof(TEntity).Name.ToLowerInvariant() + "s")
+    /// <param name="tableDataProperties"></param>
+    public LiteDbRepository(LiteDatabase dbConnection, TableDataPropertyMap? tableDataProperties = null) : this(dbConnection, typeof(TEntity).Name.ToLowerInvariant() + "s", tableDataProperties)
     {
     }
 
@@ -38,11 +40,13 @@ public class LiteDbRepository<TEntity> : IRepository<TEntity> where TEntity : Li
     /// </summary>
     /// <param name="dbConnection">The <see cref="LiteDatabase"/> connection to use for storing entities.</param>
     /// <param name="collectionName">The name of the collection to use for storing the entities.</param>
-    public LiteDbRepository(LiteDatabase dbConnection, string collectionName)
+    /// <param name="tableDataProperties"></param>
+    public LiteDbRepository(LiteDatabase dbConnection, string collectionName, TableDataPropertyMap? tableDataProperties = null)
     {
         this.connection = dbConnection;
+        this.tableData = (tableDataProperties ?? new TableDataPropertyMap()).GetAccessor<TEntity>();
         Collection = this.connection.GetCollection<TEntity>(collectionName);
-        _ = Collection.EnsureIndex(x => x.UpdatedAt);
+        _ = Collection.EnsureIndex(this.tableData.UpdatedAtExpression);
     }
 
     /// <summary>
@@ -66,8 +70,8 @@ public class LiteDbRepository<TEntity> : IRepository<TEntity> where TEntity : Li
     /// <param name="entity">The entity to update.</param>
     protected void UpdateEntity(TEntity entity)
     {
-        entity.UpdatedAt = DateTimeOffset.UtcNow;
-        entity.Version = VersionGenerator.Invoke();
+        this.tableData.SetUpdatedAt(entity, DateTimeOffset.UtcNow);
+        this.tableData.SetVersion(entity, VersionGenerator.Invoke());
     }
 
     /// <summary>
@@ -109,14 +113,16 @@ public class LiteDbRepository<TEntity> : IRepository<TEntity> where TEntity : Li
     /// <inheritdoc/>
     public virtual async ValueTask CreateAsync(TEntity entity, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(entity.Id))
+        string? entityId = this.tableData.GetId(entity);
+        if (string.IsNullOrEmpty(entityId))
         {
-            entity.Id = IdGenerator.Invoke(entity);
+            entityId = IdGenerator.Invoke(entity);
+            this.tableData.SetId(entity, entityId);
         }
 
         await ExecuteOnLockedCollectionAsync(() =>
         {
-            TEntity existingEntity = Collection.FindById(entity.Id);
+            TEntity existingEntity = Collection.FindOne(this.tableData.CreateIdEqualsExpression(entityId));
             if (existingEntity != null)
             {
                 throw new HttpException(HttpStatusCodes.Status409Conflict) { Payload = existingEntity };
@@ -134,8 +140,8 @@ public class LiteDbRepository<TEntity> : IRepository<TEntity> where TEntity : Li
 
         await ExecuteOnLockedCollectionAsync(() =>
         {
-            TEntity storedEntity = Collection.FindById(id) ?? throw new HttpException(HttpStatusCodes.Status404NotFound);
-            if (version?.Length > 0 && !storedEntity.Version.SequenceEqual(version))
+            TEntity storedEntity = Collection.FindOne(this.tableData.CreateIdEqualsExpression(id)) ?? throw new HttpException(HttpStatusCodes.Status404NotFound);
+            if (version?.Length > 0 && !this.tableData.GetVersion(storedEntity).SequenceEqual(version))
             {
                 throw new HttpException(HttpStatusCodes.Status412PreconditionFailed) { Payload = storedEntity };
             }
@@ -149,19 +155,20 @@ public class LiteDbRepository<TEntity> : IRepository<TEntity> where TEntity : Li
     {
         CheckIdIsValid(id);
 
-        TEntity entity = Collection.FindById(id) ?? throw new HttpException(HttpStatusCodes.Status404NotFound);
+        TEntity entity = Collection.FindOne(this.tableData.CreateIdEqualsExpression(id)) ?? throw new HttpException(HttpStatusCodes.Status404NotFound);
         return ValueTask.FromResult(entity);
     }
 
     /// <inheritdoc/>
     public virtual async ValueTask ReplaceAsync(TEntity entity, byte[]? version = null, CancellationToken cancellationToken = default)
     {
-        CheckIdIsValid(entity.Id);
+        string? entityId = this.tableData.GetId(entity);
+        CheckIdIsValid(entityId!);
 
         await ExecuteOnLockedCollectionAsync(() =>
         {
-            TEntity storedEntity = Collection.FindById(entity.Id) ?? throw new HttpException(HttpStatusCodes.Status404NotFound);
-            if (version?.Length > 0 && !storedEntity.Version.SequenceEqual(version))
+            TEntity storedEntity = Collection.FindOne(this.tableData.CreateIdEqualsExpression(entityId!)) ?? throw new HttpException(HttpStatusCodes.Status404NotFound);
+            if (version?.Length > 0 && !this.tableData.GetVersion(storedEntity).SequenceEqual(version))
             {
                 throw new HttpException(HttpStatusCodes.Status412PreconditionFailed) { Payload = storedEntity };
             }

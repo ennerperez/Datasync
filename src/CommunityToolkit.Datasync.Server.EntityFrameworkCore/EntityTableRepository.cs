@@ -26,6 +26,11 @@ public class EntityTableRepository<TEntity> : IRepository<TEntity> where TEntity
     protected DbSet<TEntity> DataSet { get; }
 
     /// <summary>
+    /// The accessor for Datasync system metadata.
+    /// </summary>
+    protected TableDataAccessor<TEntity> TableData { get; }
+
+    /// <summary>
     /// If <c>true</c>, then <c>UpdatedAt</c> is updated by the repository.
     /// </summary>
     private readonly bool shouldUpdateUpdatedAt;
@@ -40,10 +45,12 @@ public class EntityTableRepository<TEntity> : IRepository<TEntity> where TEntity
     /// <see cref="DbContext"/> to store the entities."
     /// </summary>
     /// <param name="context">The database context representing the backend store.</param>
+    /// <param name="tableDataProperties"></param>
     /// <exception cref="ArgumentException">Thrown if the <typeparamref name="TEntity"/> is not registered in the <paramref name="context"/>.</exception>
-    public EntityTableRepository(DbContext context)
+    public EntityTableRepository(DbContext context, TableDataPropertyMap? tableDataProperties = null)
     {
         Context = context;
+        TableData = (tableDataProperties ?? new TableDataPropertyMap()).GetAccessor<TEntity>();
         try
         {
             DataSet = context.Set<TEntity>();
@@ -55,8 +62,8 @@ public class EntityTableRepository<TEntity> : IRepository<TEntity> where TEntity
             throw new ArgumentException($"Unregistered entity type {typeof(TEntity).Name}", nameof(context));
         }
 
-        this.shouldUpdateUpdatedAt = Attribute.IsDefined(typeof(TEntity).GetProperty(nameof(ITableData.UpdatedAt))!, typeof(UpdatedByRepositoryAttribute));
-        this.shouldUpdateVersion = Attribute.IsDefined(typeof(TEntity).GetProperty(nameof(ITableData.Version))!, typeof(UpdatedByRepositoryAttribute));
+        this.shouldUpdateUpdatedAt = Attribute.IsDefined(TableData.UpdatedAtProperty, typeof(UpdatedByRepositoryAttribute));
+        this.shouldUpdateVersion = Attribute.IsDefined(TableData.VersionProperty, typeof(UpdatedByRepositoryAttribute));
     }
 
     /// <summary>
@@ -76,7 +83,7 @@ public class EntityTableRepository<TEntity> : IRepository<TEntity> where TEntity
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> to observe.</param>
     /// <returns>A task that returns an untracked version of the entity when complete.</returns>
     protected Task<TEntity> GetEntityAsync(string id, CancellationToken cancellationToken = default)
-        => DataSet.AsNoTracking().SingleAsync(x => x.Id == id, cancellationToken);
+        => DataSet.AsNoTracking().SingleAsync(TableData.CreateIdEqualsExpression(id), cancellationToken);
 
     /// <summary>
     /// Updates the managed properties for this entity if required.
@@ -86,12 +93,12 @@ public class EntityTableRepository<TEntity> : IRepository<TEntity> where TEntity
     {
         if (this.shouldUpdateUpdatedAt)
         {
-            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            TableData.SetUpdatedAt(entity, DateTimeOffset.UtcNow);
         }
 
         if (this.shouldUpdateVersion)
         {
-            entity.Version = VersionGenerator.Invoke();
+            TableData.SetVersion(entity, VersionGenerator.Invoke());
         }
     }
 
@@ -130,14 +137,16 @@ public class EntityTableRepository<TEntity> : IRepository<TEntity> where TEntity
     [SuppressMessage("Performance", "CA1827:Do not use Count() or LongCount() when Any() can be used", Justification = "Not all EF providers support Any()")]
     public virtual async ValueTask CreateAsync(TEntity entity, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(entity.Id))
+        string? entityId = TableData.GetId(entity);
+        if (string.IsNullOrEmpty(entityId))
         {
-            entity.Id = IdGenerator.Invoke(entity);
+            entityId = IdGenerator.Invoke(entity);
+            TableData.SetId(entity, entityId);
         }
 
-        await WrapExceptionAsync(entity.Id, async () =>
+        await WrapExceptionAsync(entityId, async () =>
         {
-            TEntity? existingEntity = await DataSet.FindAsync([entity.Id], cancellationToken).ConfigureAwait(false);
+            TEntity? existingEntity = await DataSet.FindAsync([entityId], cancellationToken).ConfigureAwait(false);
             if (existingEntity is not null)
             {
                 throw new HttpException((int)HttpStatusCode.Conflict) { Payload = existingEntity };
@@ -162,7 +171,7 @@ public class EntityTableRepository<TEntity> : IRepository<TEntity> where TEntity
             TEntity storedEntity = await DataSet.FindAsync([id], cancellationToken).ConfigureAwait(false)
                 ?? throw new HttpException((int)HttpStatusCode.NotFound);
 
-            if (version?.Length > 0 && !storedEntity.Version.SequenceEqual(version))
+            if (version?.Length > 0 && !TableData.GetVersion(storedEntity).SequenceEqual(version))
             {
                 throw new HttpException((int)HttpStatusCode.PreconditionFailed) { Payload = await GetEntityAsync(id, cancellationToken).ConfigureAwait(false) };
             }
@@ -180,7 +189,7 @@ public class EntityTableRepository<TEntity> : IRepository<TEntity> where TEntity
             throw new HttpException((int)HttpStatusCode.BadRequest, "ID is required");
         }
 
-        TEntity entity = await DataSet.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken).ConfigureAwait(false)
+        TEntity entity = await DataSet.AsNoTracking().SingleOrDefaultAsync(TableData.CreateIdEqualsExpression(id), cancellationToken).ConfigureAwait(false)
             ?? throw new HttpException((int)HttpStatusCode.NotFound);
 
         return entity;
@@ -189,19 +198,20 @@ public class EntityTableRepository<TEntity> : IRepository<TEntity> where TEntity
     /// <inheritdoc />
     public virtual async ValueTask ReplaceAsync(TEntity entity, byte[]? version = null, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(entity.Id))
+        string? entityId = TableData.GetId(entity);
+        if (string.IsNullOrEmpty(entityId))
         {
             throw new HttpException((int)HttpStatusCode.BadRequest, "ID is required");
         }
 
-        await WrapExceptionAsync(entity.Id, async () =>
+        await WrapExceptionAsync(entityId, async () =>
         {
-            TEntity storedEntity = await DataSet.FindAsync([entity.Id], cancellationToken).ConfigureAwait(false)
+            TEntity storedEntity = await DataSet.FindAsync([entityId], cancellationToken).ConfigureAwait(false)
                 ?? throw new HttpException((int)HttpStatusCode.NotFound);
 
-            if (version?.Length > 0 && !storedEntity.Version.SequenceEqual(version))
+            if (version?.Length > 0 && !TableData.GetVersion(storedEntity).SequenceEqual(version))
             {
-                throw new HttpException((int)HttpStatusCode.PreconditionFailed) { Payload = await GetEntityAsync(entity.Id, cancellationToken).ConfigureAwait(false) };
+                throw new HttpException((int)HttpStatusCode.PreconditionFailed) { Payload = await GetEntityAsync(entityId, cancellationToken).ConfigureAwait(false) };
             }
 
             UpdateManagedProperties(entity);

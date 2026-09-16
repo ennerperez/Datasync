@@ -25,13 +25,14 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
     {
         Logger.LogInformation("ReplaceAsync");
         TEntity entity = await DeserializeJsonContent(cancellationToken).ConfigureAwait(false);
+        TableDataAccessor<TEntity> tableData = GetTableDataAccessor();
         Logger.LogInformation("ReplaceAsync: {id}", id);
         if (Options.UnsafeEntityLogging)
         {
             Logger.LogDebug("ReplaceAsync: {id} entity {entity}", id, entity.ToJsonString());
         }
 
-        if (id != entity.Id)
+        if (id != tableData.GetId(entity))
         {
             Logger.LogWarning("ReplaceAsync: {id} statusCode=400 id mismatch", id);
             throw new HttpException(StatusCodes.Status400BadRequest);
@@ -46,13 +47,13 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
         }
 
         await AuthorizeRequestAsync(TableOperation.Update, existing, cancellationToken).ConfigureAwait(false);
-        if (Options.EnableSoftDelete && existing.Deleted && !Request.ShouldIncludeDeletedEntities())
+        if (Options.EnableSoftDelete && tableData.GetDeleted(existing) && !Request.ShouldIncludeDeletedEntities())
         {
             Logger.LogWarning("ReplaceAsync: {id} statusCode=410 deleted", id);
             throw new HttpException(StatusCodes.Status410Gone);
         }
 
-        Request.ParseConditionalRequest(existing, out byte[] version);
+        Request.ParseConditionalRequest(existing, tableData, out byte[] version);
         await AccessControlProvider.PreCommitHookAsync(TableOperation.Update, entity, cancellationToken).ConfigureAwait(false);
         await Repository.ReplaceAsync(entity, version, cancellationToken).ConfigureAwait(false);
         await PostCommitHookAsync(TableOperation.Update, entity, cancellationToken).ConfigureAwait(false);
@@ -61,7 +62,7 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
         // operation, so we have to do an additional GET to ensure we are getting the right version of the entity
         TEntity? updatedEntity = await Repository.ReadAsync(id, cancellationToken).ConfigureAwait(false);
 
-        Logger.LogInformation("ReplaceAsync: replaced {id}", updatedEntity?.Id);
+        Logger.LogInformation("ReplaceAsync: replaced {id}", updatedEntity is null ? null : tableData.GetId(updatedEntity));
         if (Options.UnsafeEntityLogging)
         {
             Logger.LogDebug("ReplaceAsync: replaced entity {entity}", updatedEntity?.ToJsonString() ?? "null");

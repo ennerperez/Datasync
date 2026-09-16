@@ -22,16 +22,17 @@ public class DatasyncControllerAttribute : ResultFilterAttribute, IExceptionFilt
     {
         if (context.Result is ObjectResult result)
         {
+            IDatasyncServiceOptions options = GetDatasyncServiceOptions(context.HttpContext);
             if (result.Value is ITableData entity)
             {
-                context.HttpContext.Response.Headers.SetConditionalHeaders(entity);
+                context.HttpContext.Response.Headers.SetConditionalHeaders(entity, options.TableDataProperties);
                 if (result.StatusCode == StatusCodes.Status201Created)
                 {
-                    context.HttpContext.Response.Headers.Location = $"{context.HttpContext.Request.GetDisplayUrl()}/{entity.Id}";
+                    string? id = options.TableDataProperties.GetAccessor(entity.GetType()).GetId(entity);
+                    context.HttpContext.Response.Headers.Location = $"{context.HttpContext.Request.GetDisplayUrl()}/{id}";
                 }
             }
 
-            IDatasyncServiceOptions options = GetDatasyncServiceOptions(context.HttpContext);
             context.Result = new JsonResult(result.Value, options.JsonSerializerOptions) { StatusCode = result.StatusCode };
         }
 
@@ -50,7 +51,7 @@ public class DatasyncControllerAttribute : ResultFilterAttribute, IExceptionFilt
 
             if (exception.Payload is ITableData entity)
             {
-                context.HttpContext.Response.Headers.SetConditionalHeaders(entity);
+                context.HttpContext.Response.Headers.SetConditionalHeaders(entity, options.TableDataProperties);
             }
 
             context.ExceptionHandled = true;

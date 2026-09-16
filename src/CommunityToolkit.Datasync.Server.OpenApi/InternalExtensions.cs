@@ -2,11 +2,13 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using CommunityToolkit.Datasync.Server;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.OpenApi;
 using System.Net.Mime;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 namespace CommunityToolkit.Datasync.Server.OpenApi;
 
@@ -23,7 +25,7 @@ internal static class InternalExtensions
     internal static void AddRequestBody(this OpenApiOperation operation, IOpenApiSchema bodySchema)
     {
         operation.RequestBody ??= new OpenApiRequestBody()
-        { 
+        {
             Content = new Dictionary<string, OpenApiMediaType>(),
             Description = "The entity to process.",
             Required = true
@@ -229,11 +231,21 @@ internal static class InternalExtensions
     /// Sets the system properties within the schema to be read-only
     /// </summary>
     /// <param name="schema">The schema to adjust.</param>
-    internal static void SetSystemPropertiesReadonly(this OpenApiSchema schema)
+    /// <param name="tableDataProperties">The CLR property map used for Datasync system metadata.</param>
+    internal static void SetSystemPropertiesReadonly(this OpenApiSchema schema, TableDataPropertyMap tableDataProperties)
     {
-        schema.SetSchemaPropertyReadonly("updatedAt");
-        schema.SetSchemaPropertyReadonly("version");
-        schema.SetSchemaPropertyReadonly("deleted");
+        foreach (string propertyName in tableDataProperties.GetJsonSystemPropertyNames())
+        {
+            schema.SetSchemaPropertyReadonly(propertyName);
+        }
+    }
+
+    internal static IEnumerable<string> GetJsonSystemPropertyNames(this TableDataPropertyMap tableDataProperties)
+    {
+        JsonNamingPolicy namingPolicy = JsonNamingPolicy.CamelCase;
+        yield return namingPolicy.ConvertName(tableDataProperties.UpdatedAtPropertyName);
+        yield return namingPolicy.ConvertName(tableDataProperties.VersionPropertyName);
+        yield return namingPolicy.ConvertName(tableDataProperties.DeletedPropertyName);
     }
 
     /// <summary>

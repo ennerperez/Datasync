@@ -14,6 +14,8 @@ namespace CommunityToolkit.Datasync.Server.MongoDB;
 /// <typeparam name="TEntity">The entity type to store in the database.</typeparam>
 public class MongoDBRepository<TEntity> : IRepository<TEntity> where TEntity : MongoTableData
 {
+    private readonly TableDataAccessor<TEntity> tableData;
+
     /// <summary>
     /// Creates a new <see cref="MongoDBRepository{TEntity}"/> using the provided MongoDB database.
     /// </summary>
@@ -21,7 +23,8 @@ public class MongoDBRepository<TEntity> : IRepository<TEntity> where TEntity : M
     /// The collection name is based on the entity type.
     /// </remarks>
     /// <param name="database">The <see cref="IMongoDatabase"/> to use for storing entities.</param>
-    public MongoDBRepository(IMongoDatabase database) : this(database.GetCollection<TEntity>(typeof(TEntity).Name.ToLowerInvariant() + "s"))
+    /// <param name="tableDataProperties"></param>
+    public MongoDBRepository(IMongoDatabase database, TableDataPropertyMap? tableDataProperties = null) : this(database.GetCollection<TEntity>(typeof(TEntity).Name.ToLowerInvariant() + "s"), tableDataProperties)
     {
     }
 
@@ -30,9 +33,11 @@ public class MongoDBRepository<TEntity> : IRepository<TEntity> where TEntity : M
     /// and collection name.
     /// </summary>
     /// <param name="collection">The <see cref="IMongoCollection{TDocument}"/> to use for storing entities.</param>
-    public MongoDBRepository(IMongoCollection<TEntity> collection)
+    /// <param name="tableDataProperties"></param>
+    public MongoDBRepository(IMongoCollection<TEntity> collection, TableDataPropertyMap? tableDataProperties = null)
     {
         Collection = collection;
+        this.tableData = (tableDataProperties ?? new TableDataPropertyMap()).GetAccessor<TEntity>();
         // TODO: Ensure that there is an index on the right properties.
     }
 
@@ -57,8 +62,8 @@ public class MongoDBRepository<TEntity> : IRepository<TEntity> where TEntity : M
     /// <param name="entity">The entity to update.</param>
     protected void UpdateEntity(TEntity entity)
     {
-        entity.UpdatedAt = DateTimeOffset.UtcNow;
-        entity.Version = VersionGenerator.Invoke();
+        this.tableData.SetUpdatedAt(entity, DateTimeOffset.UtcNow);
+        this.tableData.SetVersion(entity, VersionGenerator.Invoke());
     }
 
     /// <summary>
@@ -80,7 +85,7 @@ public class MongoDBRepository<TEntity> : IRepository<TEntity> where TEntity : M
     /// <param name="id">The ID of the document to find.</param>
     /// <returns>The filter definition to find the document.</returns>
     protected FilterDefinition<TEntity> GetFilterById(string id)
-        => Builders<TEntity>.Filter.Eq(x => x.Id, id);
+        => Builders<TEntity>.Filter.Eq(this.tableData.IdProperty.Name, id);
 
     /// <summary>
     /// Returns the document with the provided ID, or null if it doesn't exist.
@@ -100,12 +105,14 @@ public class MongoDBRepository<TEntity> : IRepository<TEntity> where TEntity : M
     /// <inheritdoc/>
     public virtual async ValueTask CreateAsync(TEntity entity, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(entity.Id))
+        string? entityId = this.tableData.GetId(entity);
+        if (string.IsNullOrEmpty(entityId))
         {
-            entity.Id = IdGenerator.Invoke(entity);
+            entityId = IdGenerator.Invoke(entity);
+            this.tableData.SetId(entity, entityId);
         }
 
-        TEntity? existingEntity = await FindDocumentByIdAsync(entity.Id, cancellationToken).ConfigureAwait(false);
+        TEntity? existingEntity = await FindDocumentByIdAsync(entityId, cancellationToken).ConfigureAwait(false);
         if (existingEntity is not null)
         {
             throw new HttpException(HttpStatusCodes.Status409Conflict) { Payload = existingEntity };
@@ -122,7 +129,7 @@ public class MongoDBRepository<TEntity> : IRepository<TEntity> where TEntity : M
 
         TEntity storedEntity = await FindDocumentByIdAsync(id, cancellationToken).ConfigureAwait(false)
             ?? throw new HttpException(HttpStatusCodes.Status404NotFound);
-        if (version?.Length > 0 && !storedEntity.Version.SequenceEqual(version))
+        if (version?.Length > 0 && !this.tableData.GetVersion(storedEntity).SequenceEqual(version))
         {
             throw new HttpException(HttpStatusCodes.Status412PreconditionFailed) { Payload = storedEntity };
         }
@@ -146,18 +153,19 @@ public class MongoDBRepository<TEntity> : IRepository<TEntity> where TEntity : M
     /// <inheritdoc/>
     public virtual async ValueTask ReplaceAsync(TEntity entity, byte[]? version = null, CancellationToken cancellationToken = default)
     {
-        CheckIdIsValid(entity.Id);
+        string? entityId = this.tableData.GetId(entity);
+        CheckIdIsValid(entityId!);
 
-        TEntity storedEntity = await FindDocumentByIdAsync(entity.Id, cancellationToken).ConfigureAwait(false)
+        TEntity storedEntity = await FindDocumentByIdAsync(entityId!, cancellationToken).ConfigureAwait(false)
             ?? throw new HttpException(HttpStatusCodes.Status404NotFound);
-        if (version?.Length > 0 && !storedEntity.Version.SequenceEqual(version))
+        if (version?.Length > 0 && !this.tableData.GetVersion(storedEntity).SequenceEqual(version))
         {
             throw new HttpException(HttpStatusCodes.Status412PreconditionFailed) { Payload = storedEntity };
         }
 
         UpdateEntity(entity);
         ReplaceOptions<TEntity> options = new() { IsUpsert = false };
-        ReplaceOneResult result = await Collection.ReplaceOneAsync(GetFilterById(entity.Id), entity, options, cancellationToken);
+        ReplaceOneResult result = await Collection.ReplaceOneAsync(GetFilterById(entityId!), entity, options, cancellationToken);
         if (result.IsModifiedCountAvailable && result.ModifiedCount == 0)
         {
             throw new HttpException(HttpStatusCodes.Status404NotFound);
