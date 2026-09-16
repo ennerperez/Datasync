@@ -24,7 +24,8 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
     {
         Logger.LogInformation("CreateAsync");
         TEntity entity = await DeserializeJsonContent(cancellationToken).ConfigureAwait(false);
-        Logger.LogInformation("CreateAsync: {id}", entity.Id);
+        TableDataAccessor<TEntity> tableData = GetTableDataAccessor();
+        Logger.LogInformation("CreateAsync: {id}", tableData.GetId(entity));
         if (Options.UnsafeEntityLogging)
         {
             Logger.LogDebug("CreateAsync: entity {entity}", entity.ToJsonString());
@@ -44,7 +45,7 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
             // In that case, return a generic Bad Request without the payload instead.
             if (!AccessControlProvider.EntityIsInView(conflictingEntity))
             {
-                Logger.LogWarning("CreateAsync: {id} statusCode=400 conflicting entity not in view", entity.Id);
+                Logger.LogWarning("CreateAsync: {id} statusCode=400 conflicting entity not in view", tableData.GetId(entity));
                 throw new HttpException(StatusCodes.Status400BadRequest);
             }
 
@@ -53,12 +54,12 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
 
         await PostCommitHookAsync(TableOperation.Create, entity, cancellationToken).ConfigureAwait(false);
 
-        Logger.LogInformation("CreateAsync: created {id}", entity.Id);
+        Logger.LogInformation("CreateAsync: created {id}", tableData.GetId(entity));
         if (Options.UnsafeEntityLogging)
         {
             Logger.LogDebug("CreateAsync: created entity {entity}", entity.ToJsonString());
         }
 
-        return CreatedAtRoute(new { id = entity.Id }, entity);
+        return CreatedAtRoute(new { id = tableData.GetId(entity) }, entity);
     }
 }

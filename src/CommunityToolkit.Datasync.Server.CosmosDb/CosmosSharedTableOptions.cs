@@ -19,10 +19,11 @@ public class CosmosSharedTableOptions<TEntity> : CosmosTableOptions<TEntity> whe
     /// <param name="databaseId">The ID of the database that the container is in.</param>
     /// <param name="containerId">The ID of the container that the entities are stored in.</param>
     /// <param name="shouldUpdateTimestamp">Should the timestamp be updated when an entity is updated by the repository (default is true).</param>
-    public CosmosSharedTableOptions(string databaseId, string containerId, bool shouldUpdateTimestamp = true) : base(databaseId, containerId, shouldUpdateTimestamp)
+    /// <param name="tableDataProperties">The CLR property map used for Datasync system metadata.</param>
+    public CosmosSharedTableOptions(string databaseId, string containerId, bool shouldUpdateTimestamp = true, TableDataPropertyMap? tableDataProperties = null) : base(databaseId, containerId, shouldUpdateTimestamp, tableDataProperties)
     {
         Entity = typeof(TEntity).Name;
-    }   
+    }
     /// <summary>
     /// The entity type for the data. Used as the default partition key for shared containers. defaults to the entity type name.
     /// </summary>
@@ -37,7 +38,7 @@ public class CosmosSharedTableOptions<TEntity> : CosmosTableOptions<TEntity> whe
     public override string GetPartitionKey(TEntity entity, out PartitionKey partitionKey)
     {
         partitionKey = new PartitionKey(Entity);
-        return entity.Id;
+        return TableDataProperties.GetAccessor<TEntity>().GetId(entity)!;
     }
     /// <summary>
     /// Parses the partition key from the id. Defaults to the entity type name.

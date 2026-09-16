@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using CommunityToolkit.Datasync.Server;
 using CommunityToolkit.Datasync.Server.Filters;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Controllers;
@@ -15,10 +16,21 @@ namespace CommunityToolkit.Datasync.Server.OpenApi;
 /// </summary>
 public class DatasyncOperationTransformer : IOpenApiOperationTransformer
 {
+    private readonly TableDataPropertyMap tableDataProperties;
+
     /// <summary>
     /// The list of processed entity names (which are those we have added to the schema already).
     /// </summary>
     private readonly List<string> processedEntityNames = [];
+
+    /// <summary>
+    /// Creates a new <see cref="DatasyncOperationTransformer"/>.
+    /// </summary>
+    /// <param name="options">The Datasync service options.</param>
+    public DatasyncOperationTransformer(IDatasyncServiceOptions? options = null)
+    {
+        this.tableDataProperties = options?.TableDataProperties ?? new TableDataPropertyMap();
+    }
 
     /// <inheritdoc />
     public async Task TransformAsync(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken cancellationToken)
@@ -88,7 +100,7 @@ public class DatasyncOperationTransformer : IOpenApiOperationTransformer
         }
 
         OpenApiSchema schema = await context.GetOrCreateSchemaAsync(entityType, cancellationToken: cancellationToken).ConfigureAwait(false);
-        schema.SetSystemPropertiesReadonly();
+        schema.SetSystemPropertiesReadonly(this.tableDataProperties);
         _ = context.Document!.AddComponent(entityType.Name, schema);
 
         Type pagedEntityType = typeof(PagedResult<>).MakeGenericType(entityType);

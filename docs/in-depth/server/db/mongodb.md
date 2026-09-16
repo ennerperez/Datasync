@@ -21,12 +21,24 @@ Your entity should inherit from `MongoTableData`:
 In your table controller:
 
     [Route("tables/[controller]")]
-    public class MyEntityController : TableController<Entity>
+    public class MyEntityController : TableController<MyEntity>
     {
       public MyEntityController(MongoClient client)
       {
         IMongoDatabase database = client.GetDatabase("mydatabase");
         Repository = new MongoDBRepository<MyEntity>(database.GetCollection<MyEntity>("entities"));
+      }
+    }
+
+If your entity uses custom CLR property names for Datasync metadata, pass the same `TableDataPropertyMap` that you configured for Datasync services:
+
+    [Route("tables/[controller]")]
+    public class MyEntityController : TableController<MyEntity>
+    {
+      public MyEntityController(MongoClient client, IDatasyncServiceOptions options)
+      {
+        IMongoDatabase database = client.GetDatabase("mydatabase");
+        Repository = new MongoDBRepository<MyEntity>(database.GetCollection<MyEntity>("entities"), options.TableDataProperties);
       }
     }
 

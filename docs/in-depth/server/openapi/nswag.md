@@ -15,7 +15,17 @@ Follow [the basic instructions for NSwag integration](https://github.com/RicoSut
 
         builder.Services.AddOpenApiDocument(options =>
         {
-            options.AddDatasyncProcessors();
+            options.AddDatasyncProcessor();
+        });
+
+    If you configured custom Datasync metadata property names, pass a `TableDataPropertyMap` with the same property names to the processor so generated schemas use the same JSON property names:
+
+        TableDataPropertyMap tableDataProperties = new TableDataPropertyMap()
+            .Map(id: "Key", updatedAt: "ChangedOn", version: "Token", deleted: "Removed");
+
+        builder.Services.AddOpenApiDocument(options =>
+        {
+            options.AddDatasyncProcessor(tableDataProperties);
         });
 
 4. Enable the middleware for serving the generated JSON document and the Swagger UI, also in `Program.cs`:

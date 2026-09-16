@@ -42,9 +42,10 @@ internal static class InternalExtensions
     /// <param name="query">The current <see cref="IQueryable{T}"/> representing the query.</param>
     /// <param name="request">The current <see cref="HttpRequest"/> being processed.</param>
     /// <param name="enableSoftDelete">A flag to indicate if soft-delete is enabled on the table being queried.</param>
+    /// <param name="tableData"></param>
     /// <returns>An updated <see cref="IQueryable{T}"/> representing the new query.</returns>
-    internal static IQueryable<T> ApplyDeletedView<T>(this IQueryable<T> query, HttpRequest request, bool enableSoftDelete) where T : ITableData
-        => !enableSoftDelete || request.ShouldIncludeDeletedEntities() ? query : query.Where(e => !e.Deleted);
+    internal static IQueryable<T> ApplyDeletedView<T>(this IQueryable<T> query, HttpRequest request, bool enableSoftDelete, TableDataAccessor<T> tableData) where T : class
+        => !enableSoftDelete || request.ShouldIncludeDeletedEntities() ? query : query.Where(tableData.CreateNotDeletedExpression());
 
     /// <summary>
     /// Applies the <c>$filter</c> OData query option to the provided query.
@@ -64,9 +65,10 @@ internal static class InternalExtensions
     /// <param name="query">The current <see cref="IQueryable{T}"/> representing the query.</param>
     /// <param name="orderingQueryOption">The ordering query option to apply.</param>
     /// <param name="settings">The query settings being used.</param>
+    /// <param name="tableData"></param>
     /// <returns>A modified <see cref="IQueryable{T}"/> representing the ordered data.</returns>
-    internal static IQueryable<T> ApplyODataOrderBy<T>(this IQueryable<T> query, OrderByQueryOption? orderingQueryOption, ODataQuerySettings settings) where T : ITableData
-        => orderingQueryOption?.ApplyTo(query, settings).ThenBy(e => e.Id) ?? query.OrderBy(e => e.Id);
+    internal static IQueryable<T> ApplyODataOrderBy<T>(this IQueryable<T> query, OrderByQueryOption? orderingQueryOption, ODataQuerySettings settings, TableDataAccessor<T> tableData) where T : class
+        => orderingQueryOption?.ApplyTo(query, settings).ThenBy(tableData.IdExpression) ?? query.OrderBy(tableData.IdExpression);
 
     /// <summary>
     /// Applies the <c>$skip</c> and <c>$top</c> OData query options to the provided query.
@@ -162,29 +164,32 @@ internal static class InternalExtensions
     /// <typeparam name="TEntity">The type of entity being checked.</typeparam>
     /// <param name="request">The current <see cref="HttpRequest"/> object that contains the request headers.</param>
     /// <param name="entity">The entity being checked.</param>
+    /// <param name="tableData"></param>
     /// <param name="version">On conclusion, the version that was requested.</param>
     /// <exception cref="HttpException">Thrown if the conditional request requirements are not met.</exception>
-    internal static void ParseConditionalRequest<TEntity>(this HttpRequest request, TEntity entity, out byte[] version) where TEntity : ITableData
+    internal static void ParseConditionalRequest<TEntity>(this HttpRequest request, TEntity entity, TableDataAccessor<TEntity> tableData, out byte[] version) where TEntity : class
     {
         RequestHeaders headers = request.GetTypedHeaders();
         bool isFetch = request.Method.Equals("GET", StringComparison.InvariantCultureIgnoreCase);
+        byte[] entityVersion = tableData.GetVersion(entity);
+        DateTimeOffset? updatedAt = tableData.GetUpdatedAt(entity);
 
-        if (headers.IfMatch.Count > 0 && !headers.IfMatch.Any(e => e.Matches(entity.Version)))
+        if (headers.IfMatch.Count > 0 && !headers.IfMatch.Any(e => e.Matches(entityVersion)))
         {
             throw new HttpException(StatusCodes.Status412PreconditionFailed) { Payload = entity };
         }
 
-        if (headers.IfMatch.Count == 0 && headers.IfUnmodifiedSince.HasValue && headers.IfUnmodifiedSince.Value.IsBefore(entity.UpdatedAt))
+        if (headers.IfMatch.Count == 0 && headers.IfUnmodifiedSince.HasValue && headers.IfUnmodifiedSince.Value.IsBefore(updatedAt))
         {
             throw new HttpException(StatusCodes.Status412PreconditionFailed) { Payload = entity };
         }
 
-        if (headers.IfNoneMatch.Count > 0 && headers.IfNoneMatch.Any(e => e.Matches(entity.Version)))
+        if (headers.IfNoneMatch.Count > 0 && headers.IfNoneMatch.Any(e => e.Matches(entityVersion)))
         {
             throw isFetch ? new HttpException(StatusCodes.Status304NotModified) : new HttpException(StatusCodes.Status412PreconditionFailed) { Payload = entity };
         }
 
-        if (headers.IfNoneMatch.Count == 0 && headers.IfModifiedSince.HasValue && headers.IfModifiedSince.Value.IsAfter(entity.UpdatedAt))
+        if (headers.IfNoneMatch.Count == 0 && headers.IfModifiedSince.HasValue && headers.IfModifiedSince.Value.IsAfter(updatedAt))
         {
             throw isFetch ? new HttpException(StatusCodes.Status304NotModified) : new HttpException(StatusCodes.Status412PreconditionFailed) { Payload = entity };
         }
@@ -193,25 +198,47 @@ internal static class InternalExtensions
     }
 
     /// <summary>
+    /// Determines if the request has met the preconditions within the conditional headers, according to RFC 7232 section 5 and 6.
+    /// </summary>
+    /// <typeparam name="TEntity">The type of entity being checked.</typeparam>
+    /// <param name="request">The current <see cref="HttpRequest"/> object that contains the request headers.</param>
+    /// <param name="entity">The entity being checked.</param>
+    /// <param name="version">On conclusion, the version that was requested.</param>
+    internal static void ParseConditionalRequest<TEntity>(this HttpRequest request, TEntity entity, out byte[] version) where TEntity : class, ITableData
+        => request.ParseConditionalRequest(entity, new TableDataPropertyMap().GetAccessor<TEntity>(), out version);
+
+    /// <summary>
+    /// Adds the required conditional headers to a header dictionary.
+    /// </summary>
+    /// <param name="headers">The current header dictionary.</param>
+    /// <param name="entity">Tne entity to use for setting conditional header values.</param>
+    /// <param name="tableDataProperties"></param>
+    internal static void SetConditionalHeaders(this IHeaderDictionary headers, object entity, TableDataPropertyMap tableDataProperties)
+    {
+        _ = headers.Remove(HeaderNames.ETag);
+        _ = headers.Remove(HeaderNames.LastModified);
+        TableDataAccessor tableData = tableDataProperties.GetAccessor(entity.GetType());
+        byte[] version = tableData.GetVersion(entity);
+        DateTimeOffset? updatedAt = tableData.GetUpdatedAt(entity);
+
+        if (version.Length > 0)
+        {
+            headers.Append(HeaderNames.ETag, $"\"{version.ToEntityTagValue()}\"");
+        }
+
+        if (updatedAt.HasValue && updatedAt.Value != default)
+        {
+            headers.Append(HeaderNames.LastModified, updatedAt.Value.ToString(DateTimeFormatInfo.InvariantInfo.RFC1123Pattern, CultureInfo.InvariantCulture));
+        }
+    }
+
+    /// <summary>
     /// Adds the required conditional headers to a header dictionary.
     /// </summary>
     /// <param name="headers">The current header dictionary.</param>
     /// <param name="entity">Tne entity to use for setting conditional header values.</param>
     internal static void SetConditionalHeaders(this IHeaderDictionary headers, ITableData entity)
-    {
-        _ = headers.Remove(HeaderNames.ETag);
-        _ = headers.Remove(HeaderNames.LastModified);
-
-        if (entity.Version.Length > 0)
-        {
-            headers.Append(HeaderNames.ETag, $"\"{entity.Version.ToEntityTagValue()}\"");
-        }
-
-        if (entity.UpdatedAt.HasValue && entity.UpdatedAt.Value != default)
-        {
-            headers.Append(HeaderNames.LastModified, entity.UpdatedAt.Value.ToString(DateTimeFormatInfo.InvariantInfo.RFC1123Pattern, CultureInfo.InvariantCulture));
-        }
-    }
+        => headers.SetConditionalHeaders(entity, new TableDataPropertyMap());
 
     /// <summary>
     /// Determines if the client requested that the deleted items should be considered to

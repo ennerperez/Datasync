@@ -56,6 +56,12 @@ public class TableControllerOptions
     public bool UnsafeEntityLogging { get; set; }
 
     /// <summary>
+    /// The CLR property map used for Datasync system metadata by this controller.
+    /// If unset, the globally configured Datasync service options are used.
+    /// </summary>
+    public TableDataPropertyMap? TableDataProperties { get; set; }
+
+    /// <summary>
     /// The maximum page size for the results returned by a query operation.  This is the
     /// maximum value that the client can specify for the <c>$top</c> query option.
     /// </summary>
@@ -102,4 +108,7 @@ public class TableControllerOptions
             this._unauthorizedStatusCode = value;
         }
     }
+
+    internal TableDataPropertyMap GetTableDataProperties(IDatasyncServiceOptions? serviceOptions = null)
+        => TableDataProperties ?? serviceOptions?.TableDataProperties ?? new TableDataPropertyMap();
 }

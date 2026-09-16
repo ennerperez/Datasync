@@ -28,6 +28,9 @@ public class DatasyncServiceOptions : IDatasyncServiceOptions
     /// <inheritdoc />
     public JsonSerializerOptions JsonSerializerOptions => this._options.Value;
 
+    /// <inheritdoc />
+    public TableDataPropertyMap TableDataProperties { get; } = new();
+
     private static JsonSerializerOptions GetJsonSerializerOptions() => new(JsonSerializerDefaults.Web)
     {
         AllowTrailingCommas = true,

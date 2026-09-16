@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using CommunityToolkit.Datasync.Server;
 using CommunityToolkit.Datasync.Server.Filters;
 using NJsonSchema;
 using NSwag;
@@ -9,6 +10,7 @@ using NSwag.Generation.Processors;
 using NSwag.Generation.Processors.Contexts;
 using System.Net;
 using System.Reflection;
+using System.Text.Json;
 
 namespace CommunityToolkit.Datasync.Server.NSwag;
 
@@ -17,6 +19,17 @@ namespace CommunityToolkit.Datasync.Server.NSwag;
 /// </summary>
 public class DatasyncOperationProcessor : IOperationProcessor
 {
+    private readonly TableDataPropertyMap tableDataProperties;
+
+    /// <summary>
+    /// Creates a new <see cref="DatasyncOperationProcessor"/>.
+    /// </summary>
+    /// <param name="tableDataProperties">The CLR property map used for Datasync system metadata.</param>
+    public DatasyncOperationProcessor(TableDataPropertyMap? tableDataProperties = null)
+    {
+        this.tableDataProperties = tableDataProperties ?? new TableDataPropertyMap();
+    }
+
     /// <summary>Processes the specified method information.</summary>
     /// <param name="context">The processor context.</param>
     /// <returns>true if the operation should be added to the Swagger specification.</returns>
@@ -58,14 +71,14 @@ public class DatasyncOperationProcessor : IOperationProcessor
         => controllerType.BaseType?.GetGenericArguments().FirstOrDefault()
         ?? throw new ArgumentException("Unable to retrieve generic entity type");
 
-    private static void ProcessDatasyncOperation(OperationProcessorContext context)
+    private void ProcessDatasyncOperation(OperationProcessorContext context)
     {
         OpenApiOperation operation = context.OperationDescription.Operation;
         string method = context.OperationDescription.Method;
         string path = context.OperationDescription.Path;
         Type entityType = GetTableEntityType(context.ControllerType);
         JsonSchema entitySchemaRef = GetEntityReference(context, entityType);
-        AddMissingSchemaProperties(entitySchemaRef.Reference);
+        AddMissingSchemaPropertiesCore(entitySchemaRef.Reference);
 
         if (method.Equals("DELETE", StringComparison.InvariantCultureIgnoreCase))
         {
@@ -111,35 +124,43 @@ public class DatasyncOperationProcessor : IOperationProcessor
     }
 
     internal static void AddMissingSchemaProperties(JsonSchema? schema)
+        => new DatasyncOperationProcessor().AddMissingSchemaPropertiesCore(schema);
+
+    internal void AddMissingSchemaPropertiesCore(JsonSchema? schema)
     {
         if (schema is null)
         {
             return;
         }
 
-        if (schema.Properties.ContainsKey("id") && schema.Properties.ContainsKey("updatedAt") && schema.Properties.ContainsKey("version"))
+        JsonNamingPolicy namingPolicy = JsonNamingPolicy.CamelCase;
+        string idPropertyName = namingPolicy.ConvertName(this.tableDataProperties.IdPropertyName);
+        string updatedAtPropertyName = namingPolicy.ConvertName(this.tableDataProperties.UpdatedAtPropertyName);
+        string versionPropertyName = namingPolicy.ConvertName(this.tableDataProperties.VersionPropertyName);
+
+        if (schema.Properties.ContainsKey(idPropertyName) && schema.Properties.ContainsKey(updatedAtPropertyName) && schema.Properties.ContainsKey(versionPropertyName))
         {
             // Nothing to do - the correct properties are already in the schma.
             return;
         }
 
-        _ = schema.Properties.TryAdd("id", new JsonSchemaProperty
+        _ = schema.Properties.TryAdd(idPropertyName, new JsonSchemaProperty
         {
             Type = JsonObjectType.String,
             Description = "The globally unique ID for the entity",
             IsRequired = true
         });
-        _ = schema.Properties.TryAdd("updatedAt", new JsonSchemaProperty
-        { 
+        _ = schema.Properties.TryAdd(updatedAtPropertyName, new JsonSchemaProperty
+        {
             Type = JsonObjectType.String,
             Description = "The ISO-8601 date/time string describing the last time the entity was updated with ms accuracy.",
             IsRequired = false
         });
-        _ = schema.Properties.TryAdd("version", new JsonSchemaProperty
+        _ = schema.Properties.TryAdd(versionPropertyName, new JsonSchemaProperty
         {
-            Type = JsonObjectType.String, 
-            Description = "An opaque string that changes whenever the entity changes.", 
-            IsRequired = false 
+            Type = JsonObjectType.String,
+            Description = "An opaque string that changes whenever the entity changes.",
+            IsRequired = false
         });
 
         return;

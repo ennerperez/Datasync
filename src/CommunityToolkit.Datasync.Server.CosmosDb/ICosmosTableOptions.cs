@@ -26,6 +26,10 @@ public interface ICosmosTableOptions<TEntity> where TEntity : CosmosTableData
     /// </summary>
     bool ShouldUpdateTimestamp { get; }
     /// <summary>
+    /// The CLR property map used for Datasync system metadata.
+    /// </summary>
+    TableDataPropertyMap TableDataProperties { get; }
+    /// <summary>
     /// Function to attempt to parse the partition key from the entity
     /// </summary>
     /// <param name="entityId">The entity passed from the controller to the repository ID</param>

@@ -58,6 +58,7 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
         ODataQuerySettings querySettings = new() { PageSize = Options.PageSize, EnsureStableOrdering = true };
         ODataQueryContext queryContext = new(EdmModel, typeof(TEntity), new ODataPath());
         ODataQueryOptions<TEntity> queryOptions = new(queryContext, Request);
+        TableDataAccessor<TEntity> tableData = GetTableDataAccessor();
 
         try
         {
@@ -72,7 +73,7 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
         // Determine the dataset to be queried for this user.
         IQueryable<TEntity> dataset = (await Repository.AsQueryableAsync(cancellationToken).ConfigureAwait(false))
             .ApplyDataView(AccessControlProvider.GetDataView())
-            .ApplyDeletedView(Request, Options.EnableSoftDelete);
+            .ApplyDeletedView(Request, Options.EnableSoftDelete, tableData);
 
         // Apply the requested filter from the OData transaction.
         IQueryable<TEntity> filteredDataset = dataset.ApplyODataFilter(queryOptions.Filter, querySettings);
@@ -90,7 +91,7 @@ public partial class TableController<TEntity> : ODataController where TEntity : 
 
         // Now apply the OrderBy, Skip, and Top options to the dataset.
         IQueryable<TEntity> orderedDataset = filteredDataset
-            .ApplyODataOrderBy(queryOptions.OrderBy, querySettings)
+            .ApplyODataOrderBy(queryOptions.OrderBy, querySettings, tableData)
             .ApplyODataPaging(queryOptions, querySettings);
 
         // Get the list of items within the dataset that need to be returned.

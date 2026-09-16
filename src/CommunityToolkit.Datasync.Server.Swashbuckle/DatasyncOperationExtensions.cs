@@ -2,8 +2,10 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using CommunityToolkit.Datasync.Server;
 using Microsoft.OpenApi;
 using System;
+using System.Text.Json;
 
 namespace CommunityToolkit.Datasync.Server.Swashbuckle;
 
@@ -137,14 +139,24 @@ internal static class DatasyncOperationExtensions
     /// Makes the system properties in the schema read-only.
     /// </summary>
     /// <param name="schema">The <see cref="OpenApiSchema"/> to edit.</param>
-    public static void MakeSystemPropertiesReadonly(this IOpenApiSchema schema)
+    /// <param name="systemProperties">The JSON property names to mark as read-only.</param>
+    public static void MakeSystemPropertiesReadonly(this IOpenApiSchema schema, IEnumerable<string>? systemProperties = null)
     {
+        string[] properties = [.. systemProperties ?? SystemProperties];
         foreach (KeyValuePair<string, IOpenApiSchema> property in schema.Properties!)
         {
-            if (SystemProperties.Contains(property.Key))
+            if (properties.Contains(property.Key))
             {
                 ((OpenApiSchema)property.Value).ReadOnly = true;
             }
         }
+    }
+
+    internal static IEnumerable<string> GetJsonSystemPropertyNames(this TableDataPropertyMap tableDataProperties)
+    {
+        JsonNamingPolicy namingPolicy = JsonNamingPolicy.CamelCase;
+        yield return namingPolicy.ConvertName(tableDataProperties.UpdatedAtPropertyName);
+        yield return namingPolicy.ConvertName(tableDataProperties.VersionPropertyName);
+        yield return namingPolicy.ConvertName(tableDataProperties.DeletedPropertyName);
     }
 }

@@ -19,6 +19,8 @@ public abstract class CosmosTableOptions<TEntity> : ICosmosTableOptions<TEntity>
     public virtual string ContainerId { get; }
     /// <inheritdoc />
     public virtual bool ShouldUpdateTimestamp { get; }
+    /// <inheritdoc />
+    public virtual TableDataPropertyMap TableDataProperties { get; }
 
     /// <summary>
     /// Creates a new instance of the <see cref="CosmosTableOptions{TEntity}"/> class.
@@ -26,11 +28,13 @@ public abstract class CosmosTableOptions<TEntity> : ICosmosTableOptions<TEntity>
     /// <param name="databaseId">The ID of the database that the container is in.</param>
     /// <param name="containerId">The ID of the container that the entities are stored in.</param>
     /// <param name="shouldUpdateTimestamp">Should the timestamp be updated when an entity is updated by the repository (default is true).</param>
+    /// <param name="tableDataProperties"></param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="databaseId"/> or <paramref name="containerId"/> are null or whitespace.</exception>"
     public CosmosTableOptions(
         string databaseId,
         string containerId,
-        bool shouldUpdateTimestamp = true)
+        bool shouldUpdateTimestamp = true,
+        TableDataPropertyMap? tableDataProperties = null)
     {
         if (string.IsNullOrWhiteSpace(databaseId))
         {
@@ -45,6 +49,7 @@ public abstract class CosmosTableOptions<TEntity> : ICosmosTableOptions<TEntity>
         DatabaseId = databaseId;
         ContainerId = containerId;
         ShouldUpdateTimestamp = shouldUpdateTimestamp;
+        TableDataProperties = tableDataProperties ?? new TableDataPropertyMap();
     }
     /// <inheritdoc />
     public virtual Func<TEntity, string> IdGenerator => (_) => Guid.NewGuid().ToString();

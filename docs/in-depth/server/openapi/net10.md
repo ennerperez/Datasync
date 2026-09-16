@@ -16,6 +16,8 @@ Follow [the basic instructions for OpenApi integration](https://learn.microsoft.
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddOpenApi(options => options.AddDatasyncTransformers());
 
+    If you configured custom Datasync metadata property names with `AddDatasyncServices()`, the transformer uses those names when it marks system properties in generated schemas.
+
 4. Enable the middleware for serving the generated JSON document and the Swagger UI, also in `Program.cs`:
 
         app.MapOpenApi();
