@@ -34,6 +34,13 @@ To use LiteDb with on-disk persistent storage:
             }
         }
 
+    If your entity uses custom CLR property names for Datasync metadata, pass the same `TableDataPropertyMap` that you configured for Datasync services:
+
+        public TodoItemController(LiteDatabase db, IDatasyncServiceOptions options) : base()
+        {
+            Repository = new LiteDbRepository<TodoItem>(db, "todoitems", options.TableDataProperties);
+        }
+
 ## Support and further information
 
 For more information, review the [LiteDb documentation](https://www.litedb.org/docs/).

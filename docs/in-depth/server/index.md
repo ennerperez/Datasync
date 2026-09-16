@@ -85,6 +85,54 @@ The `ITableData` interfaces provides:
 
 The Datasync libraries or the database maintains these properties.  Do not modify these properties in your own code.
 
+## Configure metadata property names
+
+By default, Datasync uses the `ITableData` property names (`Id`, `UpdatedAt`, `Version`, and `Deleted`) when it reads or writes system metadata.  If your server entity exposes that metadata through different CLR property names, configure a `TableDataPropertyMap`.
+
+The mapped properties must be public read/write properties with the following types:
+
+* `id`: `string`
+* `updatedAt`: `DateTimeOffset` or `DateTimeOffset?`
+* `version`: `byte[]`
+* `deleted`: `bool`
+
+The map uses CLR property names.  With the default JSON options, those names are converted to camelCase in OpenAPI schema output.
+
+    builder.Services.AddDatasyncServices(options =>
+    {
+        options.TableDataProperties.Map(
+            id: "Key",
+            updatedAt: "ChangedOn",
+            version: "Token",
+            deleted: "Removed");
+    });
+
+Repositories that are created manually must use the same map.  The simplest option is to resolve `IDatasyncServiceOptions` when creating the repository:
+
+    builder.Services.AddScoped<IRepository<TodoItem>>(services =>
+    {
+        AppDbContext context = services.GetRequiredService<AppDbContext>();
+        IDatasyncServiceOptions options = services.GetRequiredService<IDatasyncServiceOptions>();
+        return new EntityTableRepository<TodoItem>(context, options.TableDataProperties);
+    });
+
+You can override the metadata map for a single controller with `TableControllerOptions.TableDataProperties`:
+
+    [Route("tables/[controller]")]
+    public class TodoItemController : TableController<TodoItem>
+    {
+        public TodoItemController(AppDbContext context) : base()
+        {
+            TableDataPropertyMap tableDataProperties = new TableDataPropertyMap()
+                .Map(id: "Key", updatedAt: "ChangedOn", version: "Token", deleted: "Removed");
+
+            Repository = new EntityTableRepository<TodoItem>(context, tableDataProperties);
+            Options = new TableControllerOptions { TableDataProperties = tableDataProperties };
+        }
+    }
+
+Use one metadata map consistently for the controller, repository, and OpenAPI generator.  If they use different names, conditional requests, soft-delete, ordering, and generated schemas can refer to different properties.
+
 ## Update the DbContext
 
 Each model in the database must be registered in the `DbContext`.  For example:
@@ -131,6 +179,7 @@ The options you can set include:
 * `MaxTop` (int, default: 512000) is the maximum number of items a user can request in a single operation.
 * `EnableSoftDelete` (bool, default: false) enables soft-delete, which marks items as deleted instead of deleting them from the database.  Soft delete allows clients to update their offline cache, but requires that deleted items are purged from the database separately.
 * `UnauthorizedStatusCode` (int, default: 401 Unauthorized) is the status code returned when the user isn't allowed to do an action.  The value must be a client error (4xx) status code in the range 400-499.
+* `TableDataProperties` (`TableDataPropertyMap`, default: global Datasync service options) controls which CLR properties are used for Datasync metadata on this controller.
 * `UnsafeEntityLogging` (bool, default: false) controls how much entity data is written to the logs.  When `false`, only the entity ID is logged at `Information` level.  When `true`, the entity ID is logged at `Information` level and the full (serialized) entity contents are logged at `Debug` level.  Entity contents may include personally identifiable information (PII), secrets, or other sensitive business data, so only enable this option when the additional diagnostic detail is required and the log sink is appropriately secured.
 
 ## Configure access permissions

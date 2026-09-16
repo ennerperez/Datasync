@@ -92,6 +92,14 @@ Azure Cosmos DB is a fully managed NoSQL database for high-performance applicati
         builder.Services.AddSingleton<ICosmosTableOptions<TodoItem>>(new CosmosSharedTableOptions<TodoItem>("TodoDb", "TodoContainer"));
         builder.Services.AddSingleton<ICosmosTableOptions<TodoList>>(new CosmosSharedTableOptions<TodoList>("TodoDb", "TodoContainer"));
 
+    If your entity uses custom CLR property names for Datasync metadata, pass the same `TableDataPropertyMap` that you configured for Datasync services:
+
+        builder.Services.AddSingleton<ICosmosTableOptions<TodoItem>>(services =>
+        {
+            IDatasyncServiceOptions options = services.GetRequiredService<IDatasyncServiceOptions>();
+            return new CosmosSharedTableOptions<TodoItem>("TodoDb", "TodoContainer", tableDataProperties: options.TableDataProperties);
+        });
+
 5. Add the Cosmos repositories to the services collection within `Program.cs` with the following code:
 
         builder.Services.AddSingleton(typeof(IRepository<>), typeof(CosmosTableRepository<>));

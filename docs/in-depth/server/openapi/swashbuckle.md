@@ -14,8 +14,18 @@ Follow the [basic instructions for Swashbuckle integration](https://learn.micros
             options.AddDatasyncControllers();
         });
 
+    If you configured custom Datasync metadata property names, pass a `TableDataPropertyMap` with the same property names to the document filter so generated schemas use the same JSON property names:
+
+        builder.Services.AddSwaggerGen(options =>
+        {
+            TableDataPropertyMap tableDataProperties = new TableDataPropertyMap()
+                .Map(id: "Key", updatedAt: "ChangedOn", version: "Token", deleted: "Removed");
+
+            options.AddDatasyncControllers(tableDataProperties);
+        });
+
     !!! tip
-        The `AddDatasyncControllers()` method takes an optional `Assembly` that corresponds to the assembly that contains your table controllers.  The `Assembly` parameter is only required if your table controllers are in a different project to the service.
+        `AddDatasyncControllers()` uses the calling assembly when it searches for table controllers.  If your table controllers are in a different project, register `DatasyncDocumentFilter` directly and pass the controller assembly.
 
 3. Enable the middleware for serving the generated JSON document and the Swagger UI, also in `Program.cs`:
 

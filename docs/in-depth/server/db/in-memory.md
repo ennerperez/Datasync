@@ -9,6 +9,14 @@ You can create an in-memory repository with no persistent storage by adding a si
     IEnumerable<Model> seedData = GenerateSeedData();
     builder.Services.AddSingleton<IRepository<Model>>(new InMemoryRepository<Model>(seedData));
 
+If your entity uses custom CLR property names for Datasync metadata, pass the same `TableDataPropertyMap` that you configured for Datasync services:
+
+    builder.Services.AddSingleton<IRepository<Model>>(services =>
+    {
+        IDatasyncServiceOptions options = services.GetRequiredService<IDatasyncServiceOptions>();
+        return new InMemoryRepository<Model>(seedData, options.TableDataProperties);
+    });
+
 Set up your table controller as follows:
 
     [Route("tables/[controller]")]
