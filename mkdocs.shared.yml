@@ -9,6 +9,10 @@ validation:
   unrecognized_links: warn
   anchors: warn
 
+exclude_docs: |
+  STACK.md
+  plan-*-*.md
+
 plugins:
   - search
   - mermaid2
