@@ -87,6 +87,26 @@ When using online only access, these fields are optional.  The following propert
 * `Guid`
 * Anything that can be transparently serialized to a string using the `JsonSerializerOptions` provided.
 
+### Configuring metadata property names
+
+By default, the online client reads Datasync metadata from CLR properties named `Id`, `UpdatedAt`, `Version`, and `Deleted`.  If your client entity uses different property names, pass an `EntityMetadataPropertyMap` when creating the service client:
+
+```csharp
+EntityMetadataPropertyMap metadataProperties = new EntityMetadataPropertyMap()
+    .Map(
+        id: "Key",
+        updatedAt: "ChangedOn",
+        version: "Token",
+        deleted: "Removed");
+
+DatasyncServiceClient<Movie> client = new(
+    new Uri("https://MYENDPOINT.azurewebsites.net/tables/movies"),
+    httpClient,
+    metadataProperties);
+```
+
+The map uses CLR property names, not JSON property names.  Convenience methods such as `RemoveAsync(entity)` and `ReplaceAsync(entity)` use this map to find the entity ID and version.  Use names that match the metadata in service payloads.
+
 ## Creating, modifying, or deleting an entity
 
 Use the following:
