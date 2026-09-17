@@ -190,8 +190,12 @@ public static class IDatasyncServiceClientExtensions
     /// <exception cref="ConflictException{TEntity}">Thrown if a version is provided and does not match the service version in the remote service dataset.</exception>
     public static ValueTask<ServiceResponse> RemoveAsync<TEntity>(this IDatasyncServiceClient<TEntity> source, TEntity entity, bool force, CancellationToken cancellationToken = default) where TEntity : class
     {
-        EntityMetadata metadata = EntityResolver.GetEntityMetadata(entity);
-        ThrowIf.EntityIdIsInvalid(metadata.Id, nameof(metadata), because: "The value of the 'Id' property must be valid.");
+        EntityMetadata metadata = GetEntityMetadata(source, entity);
+        if (!EntityMetadataPropertyMap.EntityIdIsValid(metadata.Id))
+        {
+            throw new ArgumentException("The value of the 'Id' property must be valid.", nameof(metadata));
+        }
+
         DatasyncServiceOptions options = new()
         {
             Version = force ? null : metadata.Version,
@@ -223,8 +227,12 @@ public static class IDatasyncServiceClientExtensions
     /// <exception cref="ConflictException{TEntity}">Thrown if a version is provided and does not match the service version in the remote service dataset.</exception>
     public static ValueTask<ServiceResponse<TEntity>> ReplaceAsync<TEntity>(this IDatasyncServiceClient<TEntity> source, TEntity entity, bool force, CancellationToken cancellationToken = default) where TEntity : class
     {
-        EntityMetadata metadata = EntityResolver.GetEntityMetadata(entity);
-        ThrowIf.EntityIdIsInvalid(metadata.Id, nameof(metadata), because: "The value of the 'Id' property must be valid.");
+        EntityMetadata metadata = GetEntityMetadata(source, entity);
+        if (!EntityMetadataPropertyMap.EntityIdIsValid(metadata.Id))
+        {
+            throw new ArgumentException("The value of the 'Id' property must be valid.", nameof(metadata));
+        }
+
         DatasyncServiceOptions options = new()
         {
             Version = force ? null : metadata.Version
@@ -243,4 +251,13 @@ public static class IDatasyncServiceClientExtensions
     /// <exception cref="ConflictException{TEntity}">Thrown if a version is provided and does not match the service version in the remote service dataset.</exception>
     public static ValueTask<ServiceResponse<TEntity>> ReplaceAsync<TEntity>(this IDatasyncServiceClient<TEntity> source, TEntity entity, CancellationToken cancellationToken = default) where TEntity : class
         => source.ReplaceAsync(entity, false, cancellationToken);
+
+    private static EntityMetadata GetEntityMetadata<TEntity>(IDatasyncServiceClient<TEntity> source, TEntity entity) where TEntity : class
+    {
+        EntityMetadataPropertyMap entityMetadataProperties = source is DatasyncServiceClient<TEntity> datasyncClient
+            ? datasyncClient.EntityMetadataProperties
+            : new EntityMetadataPropertyMap();
+
+        return entityMetadataProperties.GetAccessor<TEntity>().GetEntityMetadata(entity);
+    }
 }

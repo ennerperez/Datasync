@@ -33,7 +33,21 @@ public class DatasyncServiceClient<TEntity> : IDatasyncServiceClient<TEntity> wh
     /// </remarks>
     /// <param name="options">The <see cref="HttpClientOptions"/> to use.</param>
     public DatasyncServiceClient(HttpClientOptions options)
-        : this(new Uri($"/tables/{typeof(TEntity).Name.ToLowerInvariant()}", UriKind.Relative), new HttpClientFactory(options).CreateClient())
+        : this(options, new EntityMetadataPropertyMap())
+    {
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="DatasyncServiceClient{TEntity}"/> using default information based on
+    /// the <see cref="HttpClientOptions"/> provided.
+    /// </summary>
+    /// <remarks>
+    /// The default path is /tables/entityName as a relative URI to the Endpoint in the options.
+    /// </remarks>
+    /// <param name="options">The <see cref="HttpClientOptions"/> to use.</param>
+    /// <param name="entityMetadataProperties">The CLR property map used for Datasync entity metadata.</param>
+    public DatasyncServiceClient(HttpClientOptions options, EntityMetadataPropertyMap entityMetadataProperties)
+        : this(new Uri($"/tables/{typeof(TEntity).Name.ToLowerInvariant()}", UriKind.Relative), new HttpClientFactory(options).CreateClient(), DatasyncSerializer.JsonSerializerOptions, entityMetadataProperties)
     {
     }
 
@@ -45,7 +59,20 @@ public class DatasyncServiceClient<TEntity> : IDatasyncServiceClient<TEntity> wh
     /// <param name="client">The <see cref="HttpClient"/> to use for communication.</param>
     /// <exception cref="UriFormatException">Thrown if the endpoint is not valid.</exception>
     public DatasyncServiceClient(Uri endpoint, HttpClient client)
-        : this(endpoint, client, DatasyncSerializer.JsonSerializerOptions)
+        : this(endpoint, client, DatasyncSerializer.JsonSerializerOptions, new EntityMetadataPropertyMap())
+    {
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="DatasyncServiceClient{TEntity}"/> with the normal information required for 
+    /// communicating with a datasync service, using the default JSON Serializer Options.
+    /// </summary>
+    /// <param name="endpoint">The endpoint of the table controller that processes the entity.</param>
+    /// <param name="client">The <see cref="HttpClient"/> to use for communication.</param>
+    /// <param name="entityMetadataProperties">The CLR property map used for Datasync entity metadata.</param>
+    /// <exception cref="UriFormatException">Thrown if the endpoint is not valid.</exception>
+    public DatasyncServiceClient(Uri endpoint, HttpClient client, EntityMetadataPropertyMap entityMetadataProperties)
+        : this(endpoint, client, DatasyncSerializer.JsonSerializerOptions, entityMetadataProperties)
     {
     }
 
@@ -58,15 +85,31 @@ public class DatasyncServiceClient<TEntity> : IDatasyncServiceClient<TEntity> wh
     /// <param name="serializerOptions">The <see cref="JsonSerializerOptions"/> to use for serializing and deserializing content.</param>
     /// <exception cref="UriFormatException">Thrown if the endpoint is not valid.</exception>
     public DatasyncServiceClient(Uri endpoint, HttpClient client, JsonSerializerOptions serializerOptions)
+        : this(endpoint, client, serializerOptions, new EntityMetadataPropertyMap())
+    {
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="DatasyncServiceClient{TEntity}"/> with the normal information required for 
+    /// communicating with a datasync service.
+    /// </summary>
+    /// <param name="endpoint">The endpoint of the table controller that processes the entity.</param>
+    /// <param name="client">The <see cref="HttpClient"/> to use for communication.</param>
+    /// <param name="serializerOptions">The <see cref="JsonSerializerOptions"/> to use for serializing and deserializing content.</param>
+    /// <param name="entityMetadataProperties">The CLR property map used for Datasync entity metadata.</param>
+    /// <exception cref="UriFormatException">Thrown if the endpoint is not valid.</exception>
+    public DatasyncServiceClient(Uri endpoint, HttpClient client, JsonSerializerOptions serializerOptions, EntityMetadataPropertyMap entityMetadataProperties)
     {
         endpoint = MakeAbsoluteUri(client.BaseAddress, endpoint);
         ThrowIf.IsNotValidEndpoint(endpoint, nameof(endpoint));
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(serializerOptions);
+        ArgumentNullException.ThrowIfNull(entityMetadataProperties);
 
         Endpoint = endpoint;
         Client = client;
         JsonSerializerOptions = serializerOptions;
+        EntityMetadataProperties = entityMetadataProperties;
     }
 
     /// <summary>
@@ -85,6 +128,11 @@ public class DatasyncServiceClient<TEntity> : IDatasyncServiceClient<TEntity> wh
     internal JsonSerializerOptions JsonSerializerOptions { get; }
 
     /// <summary>
+    /// The CLR property map used for Datasync entity metadata.
+    /// </summary>
+    public EntityMetadataPropertyMap EntityMetadataProperties { get; }
+
+    /// <summary>
     /// The media type for application/json.
     /// </summary>
     internal MediaTypeHeaderValue jsonMediaType = MediaTypeHeaderValue.Parse("application/json");
@@ -95,7 +143,7 @@ public class DatasyncServiceClient<TEntity> : IDatasyncServiceClient<TEntity> wh
     /// <typeparam name="U">The new type of the entity.</typeparam>
     /// <returns>The replaced service client.</returns>
     public IReadOnlyDatasyncServiceClient<U> ToServiceClient<U>() where U : class
-        => new DatasyncServiceClient<U>(Endpoint, Client, JsonSerializerOptions);
+        => new DatasyncServiceClient<U>(Endpoint, Client, JsonSerializerOptions, EntityMetadataProperties);
 
     /// <summary>
     /// Adds an entity to the remote service dataset.
@@ -110,8 +158,12 @@ public class DatasyncServiceClient<TEntity> : IDatasyncServiceClient<TEntity> wh
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(options);
 
-        EntityMetadata metadata = EntityResolver.GetEntityMetadata<TEntity>(entity);
-        ThrowIf.EntityIdIsInvalid(metadata.Id, nameof(metadata), because: "The value of the 'Id' property must be null or valid.", allowNull: true);
+        EntityMetadata metadata = EntityMetadataProperties.GetAccessor<TEntity>().GetEntityMetadata(entity);
+        if (!EntityMetadataPropertyMap.EntityIdIsValid(metadata.Id, allowNull: true))
+        {
+            throw new ArgumentException("The value of the 'Id' property must be null or valid.", nameof(metadata));
+        }
+
         ThrowIf.IsNotNullOrEmpty(metadata.Version, nameof(metadata), "The value of the 'Version' property must be null or empty.");
         ThrowIf.IsNotNull(metadata.UpdatedAt, nameof(metadata), "The value of the 'UpdatedAt' property must be null.");
 
@@ -337,8 +389,11 @@ public class DatasyncServiceClient<TEntity> : IDatasyncServiceClient<TEntity> wh
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(options);
 
-        EntityMetadata metadata = EntityResolver.GetEntityMetadata<TEntity>(entity);
-        ThrowIf.EntityIdIsInvalid(metadata.Id, nameof(metadata), because: "The value of the 'Id' property must be null or valid.");
+        EntityMetadata metadata = EntityMetadataProperties.GetAccessor<TEntity>().GetEntityMetadata(entity);
+        if (!EntityMetadataPropertyMap.EntityIdIsValid(metadata.Id))
+        {
+            throw new ArgumentException("The value of the 'Id' property must be null or valid.", nameof(metadata));
+        }
 
         Uri requestUri = BuildUri(metadata.Id!, options);
         using HttpRequestMessage request = new(HttpMethod.Put, requestUri)

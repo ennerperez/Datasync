@@ -60,10 +60,11 @@ internal class PullOperationManager(OfflineDbContext context, IEnumerable<Type> 
             {
                 if (pullResponse.Items.Any())
                 {
+                    EntityMetadataAccessor metadataAccessor = context.BuildDatasyncOfflineOptions().EntityMetadataProperties.GetAccessor(pullResponse.EntityType);
                     DateTimeOffset lastSynchronization = await DeltaTokenStore.GetDeltaTokenAsync(pullResponse.QueryId, cancellationToken).ConfigureAwait(false);
                     foreach (object item in pullResponse.Items)
                     {
-                        EntityMetadata metadata = EntityResolver.GetEntityMetadata(item, pullResponse.EntityType);
+                        EntityMetadata metadata = metadataAccessor.GetEntityMetadata(item);
                         currentMetadata = metadata;
                         object? originalEntity = await context.FindAsync(pullResponse.EntityType, [metadata.Id], cancellationToken).ConfigureAwait(false);
 

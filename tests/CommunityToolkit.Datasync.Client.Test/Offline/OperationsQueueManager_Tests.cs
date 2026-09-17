@@ -43,6 +43,28 @@ public class OperationsQueueManager_Tests : BaseTest
         Func<Task> act = async () => _ = await queueManager.GetExistingOperationAsync(this.context.Entry(movie));
         await act.Should().ThrowAsync<DatasyncException>();
     }
+
+    [Fact]
+    public void GetOperationForChangedEntity_UsesCustomEntityMetadataProperties()
+    {
+        using SqliteConnection connection = CreateAndOpenConnection();
+        DbContextOptionsBuilder<CustomMetadataDbContext> optionsBuilder = new DbContextOptionsBuilder<CustomMetadataDbContext>()
+            .UseSqlite(connection);
+        using CustomMetadataDbContext context = new(optionsBuilder.Options);
+        context.Database.EnsureCreated();
+        CustomMetadataEntity entity = new()
+        {
+            Uid = Guid.NewGuid().ToString("N"),
+            ModifiedOn = DateTimeOffset.UtcNow,
+            ETag = "version-1"
+        };
+
+        context.Entities.Add(entity);
+        DatasyncOperation operation = context.QueueManager.GetOperationForChangedEntity(context.Entry(entity));
+
+        operation.ItemId.Should().Be(entity.Uid);
+        operation.EntityVersion.Should().Be(entity.ETag);
+    }
     #endregion
 
     #region GetSynchronizableEntityTypes
@@ -513,4 +535,36 @@ public class OperationsQueueManager_Tests : BaseTest
             .Which.EntityType.Should().NotContain("Castle.Proxies");
     }
     #endregion
+
+    private class CustomMetadataDbContext(DbContextOptions<CustomMetadataDbContext> options) : OfflineDbContext(options)
+    {
+        public DbSet<CustomMetadataEntity> Entities => Set<CustomMetadataEntity>();
+
+        protected override void OnDatasyncInitialization(DatasyncOfflineOptionsBuilder optionsBuilder)
+        {
+            optionsBuilder.UseHttpClient(new HttpClient { BaseAddress = new Uri("http://localhost") });
+            optionsBuilder.EntityMetadataProperties.Map(
+                id: nameof(CustomMetadataEntity.Uid),
+                updatedAt: nameof(CustomMetadataEntity.ModifiedOn),
+                version: nameof(CustomMetadataEntity.ETag),
+                deleted: nameof(CustomMetadataEntity.IsRemoved));
+        }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<CustomMetadataEntity>().HasKey(entity => entity.Uid);
+            base.OnModelCreating(modelBuilder);
+        }
+    }
+
+    private class CustomMetadataEntity
+    {
+        public string Uid { get; set; }
+
+        public DateTimeOffset? ModifiedOn { get; set; }
+
+        public string ETag { get; set; }
+
+        public bool IsRemoved { get; set; }
+    }
 }
