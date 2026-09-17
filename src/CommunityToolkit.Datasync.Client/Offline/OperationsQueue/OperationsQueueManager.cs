@@ -43,6 +43,11 @@ internal class OperationsQueueManager : IOperationsQueueManager
     internal Lazy<OfflineOptions> _offlineOptions;
 
     /// <summary>
+    /// The CLR property map used for Datasync entity metadata.
+    /// </summary>
+    internal Lazy<EntityMetadataPropertyMap> _entityMetadataProperties;
+
+    /// <summary>
     /// A reference to the internal operations queue.  This is not synchronized to
     /// the remote service.
     /// </summary>
@@ -62,6 +67,7 @@ internal class OperationsQueueManager : IOperationsQueueManager
         this._context = context;
         this._entityMap = GetEntityMap(context);
         this._offlineOptions = new(context.BuildDatasyncOfflineOptions);
+        this._entityMetadataProperties = new(context.BuildEntityMetadataProperties);
     }
 
     /// <summary>
@@ -85,7 +91,7 @@ internal class OperationsQueueManager : IOperationsQueueManager
     /// * The property is public and a <see cref="DbSet{TEntity}"/>.
     /// * The property does not have a <see cref="DoNotSynchronizeAttribute"/> specified.
     /// * The entity type is defined in the model.
-    /// * The entity type has an Id, UpdatedAt, and Version property (according to the <see cref="EntityResolver"/>).
+    /// * The entity type metadata is validated by the offline options.
     /// </para>
     /// </remarks>
     [SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "Readability")]
@@ -93,7 +99,6 @@ internal class OperationsQueueManager : IOperationsQueueManager
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        Type[] modelEntities = context.Model.GetEntityTypes().Select(m => m.ClrType).ToArray();
         Type[] synchronizableEntities = context.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(IsSynchronizationEntity)
             .Select(p => p.PropertyType.GetGenericArguments()[0])
@@ -103,9 +108,6 @@ internal class OperationsQueueManager : IOperationsQueueManager
         foreach (Type entityType in synchronizableEntities)
         {
             DatasyncException.ThrowIfNullOrEmpty(entityType.FullName, $"Offline entity {entityType.Name} must be a valid reference type.");
-            EntityResolver.EntityPropertyInfo propInfo = EntityResolver.GetEntityPropertyInfo(entityType);
-            DatasyncException.ThrowIfNull(propInfo.UpdatedAtPropertyInfo, $"Offline entity {entityType.Name} does not have an UpdatedAt property.");
-            DatasyncException.ThrowIfNull(propInfo.VersionPropertyInfo, $"Offline entity {entityType.Name} does not have a Version property.");
             entityMap.Add(entityType.FullName!, entityType);
         }
 
@@ -122,8 +124,8 @@ internal class OperationsQueueManager : IOperationsQueueManager
     internal async ValueTask<DatasyncOperation?> GetExistingOperationAsync(EntityEntry entityEntry, CancellationToken cancellationToken = default)
     {
         Type entityType = entityEntry.Metadata.ClrType;
-        EntityMetadata metadata = EntityResolver.GetEntityMetadata(entityEntry.Entity, entityType);
-        if (!EntityResolver.EntityIdIsValid(metadata.Id))
+        EntityMetadata metadata = this._entityMetadataProperties.Value.GetAccessor(entityType).GetEntityMetadata(entityEntry.Entity);
+        if (!EntityMetadataPropertyMap.EntityIdIsValid(metadata.Id))
         {
             throw new DatasyncException($"Entity ID for type {entityType.FullName} is invalid.");
         }
@@ -149,8 +151,8 @@ internal class OperationsQueueManager : IOperationsQueueManager
     internal DatasyncOperation GetOperationForChangedEntity(EntityEntry entry)
     {
         Type entityType = entry.Metadata.ClrType;
-        EntityMetadata metadata = EntityResolver.GetEntityMetadata(entry.Entity, entityType);
-        if (!EntityResolver.EntityIdIsValid(metadata.Id))
+        EntityMetadata metadata = this._entityMetadataProperties.Value.GetAccessor(entityType).GetEntityMetadata(entry.Entity);
+        if (!EntityMetadataPropertyMap.EntityIdIsValid(metadata.Id))
         {
             throw new DatasyncException($"Entity ID for type {entityType.FullName} is invalid.");
         }

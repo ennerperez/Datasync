@@ -5,6 +5,7 @@
 using CommunityToolkit.Datasync.Client.Http;
 using CommunityToolkit.Datasync.Client.Offline.Models;
 using CommunityToolkit.Datasync.Client.Query.Linq;
+using CommunityToolkit.Datasync.Client.Serialization;
 
 namespace CommunityToolkit.Datasync.Client.Offline;
 
@@ -18,12 +19,19 @@ public class DatasyncOfflineOptionsBuilder
     internal readonly Dictionary<string, EntityOfflineOptions> _entities;
 
     /// <summary>
+    /// The CLR property map used for Datasync entity metadata.
+    /// </summary>
+    public EntityMetadataPropertyMap EntityMetadataProperties { get; }
+
+    /// <summary>
     /// Creates the builder based on the required entity types.
     /// </summary>
     /// <param name="entityTypes">The entity type list.</param>
-    internal DatasyncOfflineOptionsBuilder(IEnumerable<Type> entityTypes)
+    /// <param name="entityMetadataProperties">The CLR property map used for Datasync entity metadata.</param>
+    internal DatasyncOfflineOptionsBuilder(IEnumerable<Type> entityTypes, EntityMetadataPropertyMap? entityMetadataProperties = null)
     {
         this._entities = entityTypes.ToDictionary(x => x.FullName!, x => new EntityOfflineOptions(x));
+        EntityMetadataProperties = entityMetadataProperties ?? new EntityMetadataPropertyMap();
     }
 
     /// <summary>
@@ -148,15 +156,24 @@ public class DatasyncOfflineOptionsBuilder
         OfflineOptions result = new()
         {
             HttpClientFactory = this._httpClientFactory,
-            DefaultConflictResolver = this._defaultConflictResolver
+            DefaultConflictResolver = this._defaultConflictResolver,
+            EntityMetadataProperties = EntityMetadataProperties
         };
 
         foreach (EntityOfflineOptions entity in this._entities.Values)
         {
+            ValidateOfflineEntity(entity.EntityType);
             result.AddEntity(entity.EntityType, entity.ClientName, entity.ConflictResolver, entity.Endpoint, entity.QueryDescription);
         }
 
         return result;
+    }
+
+    private void ValidateOfflineEntity(Type entityType)
+    {
+        EntityMetadataAccessor accessor = EntityMetadataProperties.GetAccessor(entityType);
+        DatasyncException.ThrowIfNull(accessor.UpdatedAtPropertyInfo, $"Offline entity {entityType.Name} does not have an {EntityMetadataProperties.UpdatedAtPropertyName} property.");
+        DatasyncException.ThrowIfNull(accessor.VersionPropertyInfo, $"Offline entity {entityType.Name} does not have a {EntityMetadataProperties.VersionPropertyName} property.");
     }
 
     /// <summary>

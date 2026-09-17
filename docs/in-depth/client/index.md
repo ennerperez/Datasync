@@ -57,6 +57,32 @@ Each synchronizable entity in an offline context **MUST** have the following pro
 
 The `OnDatasyncInitialization()` method is used to set options for data synchronization.  These include setting up the HTTP client and setting up information about each entity.
 
+### Configuring metadata property names
+
+By default, the offline client uses `Id`, `UpdatedAt`, `Version`, and `Deleted` as the CLR property names for Datasync metadata.  If your client entity uses different property names, configure `EntityMetadataProperties` in `OnDatasyncInitialization()`:
+
+    public class Movie
+    {
+        public string Key { get; set; } = string.Empty;
+        public DateTimeOffset? ChangedOn { get; set; }
+        public string? Token { get; set; }
+        public bool Removed { get; set; }
+        public string Title { get; set; } = string.Empty;
+    }
+
+    protected override void OnDatasyncInitialization(DatasyncOfflineOptionsBuilder optionsBuilder)
+    {
+        optionsBuilder.UseEndpoint(new Uri("https://MYENDPOINT.azurewebsites.net"));
+
+        optionsBuilder.EntityMetadataProperties.Map(
+            id: nameof(Movie.Key),
+            updatedAt: nameof(Movie.ChangedOn),
+            version: nameof(Movie.Token),
+            deleted: nameof(Movie.Removed));
+    }
+
+The map uses CLR property names, not JSON property names.  Offline entities still require an identifier, an updated-at value, and a version property; the deleted property is optional.  The client-side metadata map should match the metadata property names used by the service payloads.
+
 ### Configuring the HttpClient
 
 There are four ways to configure a HttpClient for communication with the datasync service:

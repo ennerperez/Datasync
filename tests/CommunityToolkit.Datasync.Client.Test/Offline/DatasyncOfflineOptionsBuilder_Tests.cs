@@ -6,6 +6,7 @@ using CommunityToolkit.Datasync.Client.Http;
 using CommunityToolkit.Datasync.Client.Offline;
 using CommunityToolkit.Datasync.Client.Offline.Models;
 using CommunityToolkit.Datasync.Client.Query.OData;
+using CommunityToolkit.Datasync.Client.Serialization;
 using CommunityToolkit.Datasync.Client.Test.Helpers;
 using CommunityToolkit.Datasync.Client.Test.Offline.Helpers;
 using CommunityToolkit.Datasync.TestCommon.Databases;
@@ -216,6 +217,36 @@ public class DatasyncOfflineOptionsBuilder_Tests : BaseTest
     }
 
     [Fact]
+    public void Build_UsesCustomEntityMetadataProperties()
+    {
+        Type[] entityTypes = [typeof(CustomMetadataEntity)];
+        DatasyncOfflineOptionsBuilder sut = new(entityTypes);
+        CustomMetadataEntity entity = new()
+        {
+            Uid = "movie-1",
+            ModifiedOn = DateTimeOffset.UtcNow,
+            ETag = "version-1",
+            IsRemoved = true
+        };
+
+        sut.UseHttpClient(new HttpClient());
+        sut.EntityMetadataProperties.Map(
+            id: nameof(CustomMetadataEntity.Uid),
+            updatedAt: nameof(CustomMetadataEntity.ModifiedOn),
+            version: nameof(CustomMetadataEntity.ETag),
+            deleted: nameof(CustomMetadataEntity.IsRemoved));
+
+        OfflineOptions options = sut.Build();
+        EntityMetadata metadata = options.EntityMetadataProperties.GetAccessor<CustomMetadataEntity>().GetEntityMetadata(entity);
+
+        options.EntityMetadataProperties.Should().BeSameAs(sut.EntityMetadataProperties);
+        metadata.Id.Should().Be(entity.Uid);
+        metadata.UpdatedAt.Should().Be(entity.ModifiedOn);
+        metadata.Version.Should().Be(entity.ETag);
+        metadata.Deleted.Should().BeTrue();
+    }
+
+    [Fact]
     public void Entity_SetsType()
     {
         Type[] entityTypes = [typeof(ClientMovie), typeof(ClientKitchenSink)];
@@ -245,5 +276,16 @@ public class DatasyncOfflineOptionsBuilder_Tests : BaseTest
         result.HttpClient.Should().NotBeNull();
         result.Endpoint.ToString().Should().Be("tables/entity3");
         result.QueryDescription.ToODataQueryString().Should().Be("");
+    }
+
+    private class CustomMetadataEntity
+    {
+        public string Uid { get; set; }
+
+        public DateTimeOffset? ModifiedOn { get; set; }
+
+        public string ETag { get; set; }
+
+        public bool IsRemoved { get; set; }
     }
 }

@@ -35,6 +35,19 @@ public class DatasyncServiceClient_Tests : IDisposable
         public string StringValue { get; set; }
     }
 
+    internal class CustomMetadataServiceEntity
+    {
+        public string Uid { get; set; }
+
+        public DateTimeOffset? ModifiedOn { get; set; }
+
+        public string ETag { get; set; }
+
+        public bool IsRemoved { get; set; }
+
+        public string Title { get; set; }
+    }
+
     private readonly MockDelegatingHandler mockHandler = new();
 
     private readonly ClientKitchenSink successfulKitchenSink = new()
@@ -80,7 +93,7 @@ public class DatasyncServiceClient_Tests : IDisposable
         act.Should().Throw<TException>();
     }
 
-    private DatasyncServiceClient<T> GetMockClient<T>() where T : class
+    private DatasyncServiceClient<T> GetMockClient<T>(EntityMetadataPropertyMap entityMetadataProperties = null) where T : class
     {
         JsonSerializerOptions serializerOptions = DatasyncSerializer.JsonSerializerOptions;
         string tableName = typeof(T).Name.ToLowerInvariant();
@@ -97,7 +110,7 @@ public class DatasyncServiceClient_Tests : IDisposable
 
         HttpClientFactory factory = new(options);
         HttpClient client = factory.CreateClient();
-        DatasyncServiceClient<T> serviceClient = new(new Uri(options.Endpoint, $"/tables/{tableName}"), client, serializerOptions);
+        DatasyncServiceClient<T> serviceClient = new(new Uri(options.Endpoint, $"/tables/{tableName}"), client, serializerOptions, entityMetadataProperties ?? new EntityMetadataPropertyMap());
         return serviceClient;
     }
 
@@ -1728,6 +1741,37 @@ public class DatasyncServiceClient_Tests : IDisposable
         response.StatusCode.Should().Be(200);
         response.HasValue.Should().BeTrue();
         response.Value.Should().NotBeNull().And.BeEquivalentTo(this.successfulKitchenSink, this.entityEquivalentOptions);
+    }
+
+    [Fact]
+    public async Task ReplaceAsync_Extn_Default_UsesCustomEntityMetadataProperties()
+    {
+        EntityMetadataPropertyMap map = new();
+        map.Map(
+            id: nameof(CustomMetadataServiceEntity.Uid),
+            updatedAt: nameof(CustomMetadataServiceEntity.ModifiedOn),
+            version: nameof(CustomMetadataServiceEntity.ETag),
+            deleted: nameof(CustomMetadataServiceEntity.IsRemoved));
+        CustomMetadataServiceEntity entity = new()
+        {
+            Uid = "movie-1",
+            ETag = "version-1",
+            Title = "Black Panther"
+        };
+        string expected = JsonSerializer.Serialize(entity, DatasyncSerializer.JsonSerializerOptions);
+        this.mockHandler.AddResponseContent(expected, HttpStatusCode.OK);
+        DatasyncServiceClient<CustomMetadataServiceEntity> client = GetMockClient<CustomMetadataServiceEntity>(map);
+
+        ServiceResponse<CustomMetadataServiceEntity> response = await client.ReplaceAsync(entity, TestContext.Current.CancellationToken);
+
+        HttpRequestMessage request = this.mockHandler.Requests.SingleOrDefault();
+        request.Should().NotBeNull();
+        request.Method.Should().Be(HttpMethod.Put);
+        request.RequestUri.ToString().Should().Be("http://localhost/tables/custommetadataserviceentity/movie-1");
+        request.Headers.Should().Contain(x => x.Key == "If-Match" && x.Value.First() == "\"version-1\"");
+        (await request.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Be(expected);
+        response.IsSuccessful.Should().BeTrue();
+        response.Value.Should().BeEquivalentTo(entity);
     }
 
     [Fact]

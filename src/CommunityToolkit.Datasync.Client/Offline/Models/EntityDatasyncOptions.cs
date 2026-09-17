@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using CommunityToolkit.Datasync.Client.Query.Linq;
+using CommunityToolkit.Datasync.Client.Serialization;
 
 namespace CommunityToolkit.Datasync.Client.Offline.Models;
 
@@ -20,6 +21,11 @@ internal class EntityDatasyncOptions
     /// The endpoint for the entity type.
     /// </summary>
     public required Uri Endpoint { get; init; }
+
+    /// <summary>
+    /// The CLR property map used for Datasync entity metadata.
+    /// </summary>
+    internal EntityMetadataPropertyMap EntityMetadataProperties { get; init; } = new();
 
     /// <summary>
     /// The <see cref="HttpClient"/> pre-configured for communicating with the datasync service.

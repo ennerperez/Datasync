@@ -90,6 +90,11 @@ public abstract partial class OfflineDbContext : DbContext
     internal OfflineOptions? OfflineOptions { get; set; }
 
     /// <summary>
+    /// The CLR property map used for Datasync entity metadata.
+    /// </summary>
+    internal EntityMetadataPropertyMap? EntityMetadataProperties { get; set; }
+
+    /// <summary>
     /// The internal pull operation manager (for testing).
     /// </summary>
     internal IPullOperationManager PullOperationManager { get; set; }
@@ -147,12 +152,30 @@ public abstract partial class OfflineDbContext : DbContext
         using IDisposable optionsLock = this._optionsLock.AcquireLock();
         if (OfflineOptions is null)
         {
-            DatasyncOfflineOptionsBuilder builder = new(QueueManager.GetSynchronizableEntityTypes());
+            DatasyncOfflineOptionsBuilder builder = new(QueueManager.GetSynchronizableEntityTypes(), EntityMetadataProperties);
             OnDatasyncInitialization(builder);
             OfflineOptions = builder.Build();
+            EntityMetadataProperties = OfflineOptions.EntityMetadataProperties;
         }
         
         return OfflineOptions;
+    }
+
+    /// <summary>
+    /// Builds the entity metadata property map without requiring datasync service connection options.
+    /// </summary>
+    /// <returns>The entity metadata property map.</returns>
+    internal EntityMetadataPropertyMap BuildEntityMetadataProperties()
+    {
+        using IDisposable optionsLock = this._optionsLock.AcquireLock();
+        if (EntityMetadataProperties is null)
+        {
+            DatasyncOfflineOptionsBuilder builder = new(QueueManager.GetSynchronizableEntityTypes());
+            OnDatasyncInitialization(builder);
+            EntityMetadataProperties = builder.EntityMetadataProperties;
+        }
+
+        return EntityMetadataProperties;
     }
 
     /// <summary>

@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using CommunityToolkit.Datasync.Client.Query.Linq;
+using CommunityToolkit.Datasync.Client.Serialization;
 
 namespace CommunityToolkit.Datasync.Client.Offline.Models;
 /// <summary>
@@ -24,6 +25,11 @@ internal class OfflineOptions()
     /// The default <see cref="IConflictResolver"/> to use for this request.
     /// </summary>
     public IConflictResolver? DefaultConflictResolver { get; set; }
+
+    /// <summary>
+    /// The CLR property map used for Datasync entity metadata.
+    /// </summary>
+    public required EntityMetadataPropertyMap EntityMetadataProperties { get; init; }
 
     /// <summary>
     /// Adds an entity to the mapping of options.
@@ -57,6 +63,7 @@ internal class OfflineOptions()
             {
                 ConflictResolver = options.ConflictResolver ?? DefaultConflictResolver,
                 Endpoint = options.Endpoint,
+                EntityMetadataProperties = EntityMetadataProperties,
                 HttpClient = HttpClientFactory.CreateClient(options.ClientName),
                 QueryDescription = options.QueryDescription ?? new QueryDescription()
             };
@@ -67,6 +74,7 @@ internal class OfflineOptions()
             {
                 ConflictResolver = DefaultConflictResolver,
                 Endpoint = new Uri($"tables/{entityType.Name.ToLowerInvariant()}", UriKind.Relative),
+                EntityMetadataProperties = EntityMetadataProperties,
                 HttpClient = HttpClientFactory.CreateClient(),
                 QueryDescription = new QueryDescription()
             };
