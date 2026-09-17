@@ -39,7 +39,7 @@
       forces this version across all transitive references.
     -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />
     <PackageVersion Include="Microsoft.Spatial" Version="8.4.3" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageVersion Include="MongoDB.Driver" Version="3.9.0" />
@@ -57,6 +57,7 @@
       forces this version across all transitive references.
     -->
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.1" />
     <PackageVersion Include="System.Formats.Asn1" Version="$(DotNetVersion)" />
     <PackageVersion Include="System.Linq.Async" Version="7.0.0" />
