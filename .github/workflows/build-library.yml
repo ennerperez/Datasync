@@ -7,7 +7,7 @@ on:
     paths:
       - 'src/**'
       - 'tests/**'
-      - 'Datasync.Toolkit.sln'
+      - 'Datasync.Toolkit.slnx'
       - 'Directory.Packages.props'
       - '.github/workflows/build-library.yml'
       - '.github/workflows/SignedPackageFileList.txt'
@@ -17,7 +17,7 @@ on:
     paths:
       - 'src/**'
       - 'tests/**'
-      - 'Datasync.Toolkit.sln'
+      - 'Datasync.Toolkit.slnx'
       - 'Directory.Packages.props'
       - '.github/workflows/build-library.yml'
       - '.github/workflows/SignedPackageFileList.txt'
@@ -32,7 +32,7 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CONFIGURATION: 'Release'
   NuGetDirectory: ${{ github.workspace }}/nuget
-  SolutionFile: 'Datasync.Toolkit.sln'
+  SolutionFile: 'Datasync.Toolkit.slnx'
   BASE_VERSION: '10.0.0'
 
 permissions:

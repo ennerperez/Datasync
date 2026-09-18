@@ -1,0 +1,42 @@
+<Solution>
+  <Folder Name="/build/">
+    <File Path=".github/workflows/SignedPackageFileList.txt" />
+    <File Path=".github/workflows/SignedTemplateFileList.txt" />
+    <File Path="Directory.Packages.props" />
+  </Folder>
+  <Folder Name="/src/">
+    <File Path="src/Directory.Build.props" />
+    <Project Path="src/CommunityToolkit.Datasync.Client/CommunityToolkit.Datasync.Client.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server.Abstractions/CommunityToolkit.Datasync.Server.Abstractions.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server.Automapper/CommunityToolkit.Datasync.Server.Automapper.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server.CosmosDb/CommunityToolkit.Datasync.Server.CosmosDb.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server.EntityFrameworkCore/CommunityToolkit.Datasync.Server.EntityFrameworkCore.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server.InMemory/CommunityToolkit.Datasync.Server.InMemory.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server.LiteDb/CommunityToolkit.Datasync.Server.LiteDb.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server.MongoDB/CommunityToolkit.Datasync.Server.MongoDB.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server.NSwag/CommunityToolkit.Datasync.Server.NSwag.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server.OpenApi/CommunityToolkit.Datasync.Server.OpenApi.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server.Swashbuckle/CommunityToolkit.Datasync.Server.Swashbuckle.csproj" />
+    <Project Path="src/CommunityToolkit.Datasync.Server/CommunityToolkit.Datasync.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <File Path="tests/Directory.Build.props" />
+    <Project Path="tests/CommunityToolkit.Datasync.Client.Test/CommunityToolkit.Datasync.Client.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.Abstractions.Test/CommunityToolkit.Datasync.Server.Abstractions.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.Automapper.Test/CommunityToolkit.Datasync.Server.Automapper.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.CosmosDb.Test/CommunityToolkit.Datasync.Server.CosmosDb.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.EntityFrameworkCore.Test/CommunityToolkit.Datasync.Server.EntityFrameworkCore.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.InMemory.Test/CommunityToolkit.Datasync.Server.InMemory.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.LiteDb.Test/CommunityToolkit.Datasync.Server.LiteDb.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.MongoDB.Test/CommunityToolkit.Datasync.Server.MongoDB.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.NSwag.Test/CommunityToolkit.Datasync.Server.NSwag.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.OpenApi.Test/CommunityToolkit.Datasync.Server.OpenApi.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.Swashbuckle.Test/CommunityToolkit.Datasync.Server.Swashbuckle.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.Server.Test/CommunityToolkit.Datasync.Server.Test.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.TestCommon/CommunityToolkit.Datasync.TestCommon.csproj" />
+    <Project Path="tests/CommunityToolkit.Datasync.TestService/CommunityToolkit.Datasync.TestService.csproj" />
+  </Folder>
+  <Properties Name="RiderSharedRunConfigurations" Scope="PostLoad">
+    <Property Name="File" Value="samples\todoapp\TodoApp.Uno\.run\TodoApp.Uno.run.xml" />
+  </Properties>
+</Solution>
