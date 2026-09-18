@@ -7,7 +7,7 @@
 - API documentation: OpenAPI, Swashbuckle, and NSwag integration projects.
 - Serialization: System.Text.Json with Datasync-specific converters.
 - Tests: xUnit v3 with AwesomeAssertions and NSubstitute.
-- Build shape: `Datasync.Toolkit.sln`, central package versions in `Directory.Packages.props`, shared project settings in `src/Directory.Build.props` and `tests/Directory.Build.props`.
+- Build shape: `Datasync.Toolkit.slnx`, central package versions in `Directory.Packages.props`, shared project settings in `src/Directory.Build.props` and `tests/Directory.Build.props`.
 
 ## Considerations
 
